@@ -55,7 +55,7 @@ export async function createPrivateLink(opts: {
     linkId,
     url,
     amount: opts.amount,
-    token: (opts.token || "USDC") as any,
+    token: (opts.token || "SOL") as any,
     amountType: opts.amountType || "fixed",
     linkUsageType: opts.linkUsageType || "reusable",
     status: "active",

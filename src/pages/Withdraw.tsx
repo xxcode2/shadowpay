@@ -392,6 +392,11 @@ const Withdraw = () => {
                         <p className="text-muted-foreground">
                           Funds sent privately to your destination wallet
                         </p>
+                        <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                          <p className="text-xs text-yellow-700">
+                            💡 <strong>Demo Mode:</strong> This is a simulated withdrawal. For real transactions on mainnet, backend integration is required.
+                          </p>
+                        </div>
                       </div>
 
                       {txHash && (

@@ -305,7 +305,7 @@ const PayLink = () => {
                           {paymentData?.amount ?? "—"}
                         </span>
                         <span className="text-xl text-muted-foreground">
-                          {paymentData?.token ?? "USDC"}
+                          {paymentData?.token ?? "SOL"}
                         </span>
                       </div>
                     </div>
