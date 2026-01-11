@@ -1,13 +1,17 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Shield, Check, Loader2, ArrowRight } from "lucide-react";
+import { Lock, Shield, Check, Loader2, ArrowRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { getLinkDetails, payLink } from "@/lib/privacyCash";
+import { useWallet } from "@/hooks/use-wallet";
 
 const PayLink = () => {
+  const { connected, publicKey, connect } = useWallet();
   const [paymentState, setPaymentState] = useState<"confirm" | "processing" | "success">("confirm");
+  const [error, setError] = useState<string | null>(null);
   
   const [paymentData, setPaymentData] = useState<{ amount?: string; token?: string } | null>({
     amount: undefined,
@@ -41,25 +45,85 @@ const PayLink = () => {
     })();
   }, []);
 
-  const handlePay = () => {
+  const handlePay = async () => {
+    // Check wallet connection first
+    if (!connected || !publicKey) {
+      setError("Please connect your wallet first");
+      return;
+    }
+
+    if (!paymentData?.amount) {
+      setError("Invalid payment amount");
+      return;
+    }
+
+    setError(null);
     setPaymentState("processing");
-    (async () => {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || '';
-        const endpoint = apiUrl ? `${apiUrl}/links/${linkId}/pay` : `/api/links/${linkId}/pay`;
-        const res = await fetch(endpoint, { method: "POST" });
-        if (res.ok) {
-          setTimeout(() => setPaymentState("success"), 400);
-          return;
-        }
-      } catch (e) {
-        // fallback
+
+    try {
+      // Get Phantom wallet
+      const phantom = (window as any).phantom?.solana;
+      if (!phantom) {
+        throw new Error("Phantom wallet not found. Please install Phantom extension.");
       }
 
+      console.log("💳 Initiating payment...");
+      console.log("Amount:", paymentData.amount, paymentData.token);
+      console.log("Link ID:", linkId);
+      console.log("Wallet:", publicKey);
+
+      // Try backend first (real Privacy Cash SDK integration)
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || '';
+        if (apiUrl) {
+          const endpoint = `${apiUrl}/links/${linkId}/pay`;
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              amount: paymentData.amount,
+              token: paymentData.token || "USDC",
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            console.log("✅ Payment successful via backend", data);
+            setTimeout(() => setPaymentState("success"), 400);
+            return;
+          } else {
+            const errorData = await res.json();
+            console.warn("Backend payment failed:", errorData);
+          }
+        }
+      } catch (e) {
+        console.warn("Backend not available, using demo mode:", e);
+      }
+
+      // Demo mode: Show Phantom popup for signature (simulation)
+      console.log("🎭 Demo mode: Simulating payment...");
+      
+      // Request signature to simulate real transaction
+      const message = `Pay ${paymentData.amount} ${paymentData.token} via ShadowPay\nLink: ${linkId}\nTimestamp: ${Date.now()}`;
+      const messageBytes = new TextEncoder().encode(message);
+      
+      console.log("📝 Requesting signature from Phantom...");
+      await phantom.signMessage(messageBytes);
+      console.log("✅ Signature received (demo payment)");
+
+      // Fallback to localStorage demo
       const res = await payLink(linkId);
-      if (res.success) setTimeout(() => setPaymentState("success"), 400);
-      else setTimeout(() => setPaymentState("confirm"), 400);
-    })();
+      if (res.success) {
+        setTimeout(() => setPaymentState("success"), 400);
+      } else {
+        throw new Error("Payment failed");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Payment failed";
+      console.error("❌ Payment error:", message);
+      setError(message);
+      setPaymentState("confirm");
+    }
   };
 
   return (
@@ -134,6 +198,24 @@ const PayLink = () => {
                       </div>
                     </div>
 
+                    {/* Error Alert */}
+                    {error && (
+                      <Alert variant="destructive" className="mb-6">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{error}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Wallet Connection Warning */}
+                    {!connected && (
+                      <Alert className="mb-6 bg-yellow-500/10 border-yellow-500/30">
+                        <AlertCircle className="h-4 w-4 text-yellow-600" />
+                        <AlertDescription className="text-yellow-700">
+                          You need to connect your wallet to pay. Click the button above.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                     {/* Privacy Note */}
                     <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 mb-6">
                       <p className="text-sm text-muted-foreground text-center">
@@ -144,19 +226,34 @@ const PayLink = () => {
                     </div>
 
                     {/* Pay Button */}
-                    <Button
-                      variant="hero"
-                      size="xl"
-                      className="w-full group"
-                      onClick={handlePay}
-                    >
-                      <Lock className="w-5 h-5" />
-                      Pay Privately
-                      <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-                    </Button>
+                    {!connected ? (
+                      <Button
+                        variant="hero"
+                        size="xl"
+                        className="w-full group"
+                        onClick={connect}
+                      >
+                        <Lock className="w-5 h-5" />
+                        Connect Wallet to Pay
+                        <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="hero"
+                        size="xl"
+                        className="w-full group"
+                        onClick={handlePay}
+                      >
+                        <Lock className="w-5 h-5" />
+                        Pay {paymentData?.amount} {paymentData?.token}
+                        <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                      </Button>
+                    )}
 
                     <p className="text-xs text-muted-foreground text-center mt-4">
-                      Connect your wallet to complete the payment
+                      {connected 
+                        ? `Paying from: ${publicKey?.slice(0, 8)}...${publicKey?.slice(-4)}`
+                        : "Connect your wallet to complete the payment"}
                     </p>
                   </motion.div>
                 )}
