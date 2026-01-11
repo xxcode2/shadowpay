@@ -24,15 +24,12 @@ const Header = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
+          <Link to="/" className="flex items-center group">
             <img 
-              src="/shadow.png" 
+              src="/pay1.jpg" 
               alt="ShadowPay" 
-              className="w-12 h-12 object-contain transition-transform group-hover:scale-105" 
+              className="h-14 w-auto object-contain transition-transform group-hover:scale-105" 
             />
-            <span className="font-semibold text-xl text-foreground hidden sm:block">
-              ShadowPay
-            </span>
           </Link>
 
           {/* Desktop Nav */}
