@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import SpaceBackground from "@/components/SpaceBackground";
 import Index from "./pages/Index";
 import CreateLink from "./pages/CreateLink";
 import PayLink from "./pages/PayLink";
@@ -15,6 +16,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <SpaceBackground />
       <Toaster />
       <Sonner />
       <BrowserRouter>
