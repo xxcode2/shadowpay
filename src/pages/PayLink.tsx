@@ -71,6 +71,12 @@ const PayLink = () => {
       return;
     }
 
+    // Validate payment amount
+    if (!paymentData?.amount || paymentData.amount === "—" || isNaN(parseFloat(paymentData.amount))) {
+      setError("Invalid payment amount. This link may be corrupted.");
+      return;
+    }
+
     // Check if link has expired
     if (linkId) {
       const storedLink = localStorage.getItem(`link_${linkId}`);
@@ -302,12 +308,17 @@ const PayLink = () => {
                       <p className="text-muted-foreground text-sm mb-2">Amount to pay</p>
                       <div className="flex items-center justify-center gap-2">
                         <span className="text-4xl font-bold text-foreground">
-                          {paymentData?.amount ?? "—"}
+                          {paymentData?.amount || "—"}
                         </span>
                         <span className="text-xl text-muted-foreground">
-                          {paymentData?.token ?? "SOL"}
+                          {paymentData?.token || "SOL"}
                         </span>
                       </div>
+                      {(!paymentData?.amount || paymentData.amount === "—") && (
+                        <p className="text-xs text-red-500 mt-2">
+                          ⚠️ Invalid link: Amount not specified. Please contact the sender.
+                        </p>
+                      )}
                     </div>
 
                     {/* Privacy Info */}

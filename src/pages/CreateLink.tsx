@@ -379,18 +379,6 @@ const CreateLink = () => {
                       </p>
                     </div>
 
-                    {/* QR Code */}
-                    {generatedLink && (
-                      <div className="flex justify-center p-6 bg-white rounded-xl border border-border">
-                        <QRCodeSVG 
-                          value={generatedLink} 
-                          size={200}
-                          level="H"
-                          includeMargin={true}
-                        />
-                      </div>
-                    )}
-
                     {/* Link Display */}
                     <div className="p-4 rounded-xl bg-muted/50 border border-border">
                       <p className="text-sm text-muted-foreground mb-2">Your payment link</p>
