@@ -84,7 +84,9 @@ export function useWallet() {
               }
             } catch (err) {
               // Silent reconnect failed, user needs to connect manually
+              const errMsg = err instanceof Error ? err.message : String(err);
               console.log("ℹ️ Silent reconnect failed, manual connection required");
+              console.log("Reconnect error details:", errMsg);
               setState({
                 connected: false,
                 publicKey: null,
@@ -96,6 +98,8 @@ export function useWallet() {
           }
         } catch (err) {
           console.error("Error initializing wallet:", err);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error("Init error details:", errMsg);
           setState({
             connected: false,
             publicKey: null,
@@ -146,14 +150,28 @@ export function useWallet() {
   const connect = async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      // Check if Phantom is installed
+      // Check if Phantom is installed with better detection
       const phantom = (window as any).phantom?.solana;
+      
       if (!phantom) {
-        throw new Error("Phantom wallet not found. Please install Phantom extension.");
+        // Check if window.solana exists (some wallets)
+        const solana = (window as any).solana;
+        if (solana?.isPhantom) {
+          throw new Error("Phantom wallet detected but not properly initialized. Please refresh the page.");
+        }
+        throw new Error("Phantom wallet not found. Please install Phantom extension from phantom.app");
       }
 
-      // Request connection
-      const resp = await phantom.connect();
+      console.log("🦊 Phantom wallet detected, requesting connection...");
+
+      // Request connection with timeout
+      const connectPromise = phantom.connect();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Connection timed out. Please try again.")), 30000)
+      );
+      
+      const resp = await Promise.race([connectPromise, timeoutPromise]) as any;
+      
       const publicKey = resp.publicKey?.toString();
       if (!publicKey) {
         throw new Error("Failed to get public key from Phantom");
@@ -254,8 +272,29 @@ export function useWallet() {
 
     } catch (err) {
       // Critical wallet connection error (Phantom not found, connection rejected, etc.)
-      const message = err instanceof Error ? err.message : "Connection failed";
+      let message = "Connection failed";
+      
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === 'string') {
+        message = err;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        message = String((err as any).message);
+      }
+      
+      // Handle specific Phantom errors
+      if (message.includes('User rejected')) {
+        message = "Connection rejected by user";
+      } else if (message.includes('not found')) {
+        message = "Phantom wallet not found. Please install Phantom extension.";
+      } else if (message === "Connection failed" || message === "Unexpected error") {
+        // Generic error - provide helpful message
+        message = "Failed to connect wallet. Please try again or refresh the page.";
+      }
+      
       console.error("❌ Wallet connection failed:", message);
+      console.error("Full error:", err);
+      
       setState({
         connected: false,
         publicKey: null,
