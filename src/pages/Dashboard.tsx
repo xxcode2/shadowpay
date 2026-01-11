@@ -11,7 +11,9 @@ import {
   RefreshCw,
   Info,
   Shield,
-  MoreVertical
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { toast } from 'sonner';
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,8 @@ import Footer from "@/components/layout/Footer";
 import { getPrivateBalance, getAllLinks } from "@/lib/privacyCash";
 import type { PaymentLink } from "@/lib/types";
 
+type FilterStatus = 'all' | 'active' | 'paid' | 'expired';
+
 const Dashboard = () => {
   const [showBalance, setShowBalance] = useState(true);
   const [privateBalance, setPrivateBalance] = useState<number>(0);
@@ -41,6 +45,11 @@ const Dashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [links, setLinks] = useState<PaymentLink[]>([]);
   const [linksLoading, setLinksLoading] = useState(true);
+  
+  // Filter and pagination state
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   // Fetch balance on mount
   useEffect(() => {
@@ -102,6 +111,45 @@ const Dashboard = () => {
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     return `${days}d ago`;
+  };
+
+  // Filter logic: filter links by status
+  const filteredLinks = links.filter((link) => {
+    if (filterStatus === 'all') return true;
+    
+    // Check if expired
+    const isExpired = link.expiresAt && Date.now() > link.expiresAt;
+    
+    if (filterStatus === 'expired') {
+      return isExpired || link.status === 'expired';
+    }
+    
+    if (filterStatus === 'active') {
+      return link.status === 'active' && !isExpired;
+    }
+    
+    if (filterStatus === 'paid') {
+      return link.status === 'paid';
+    }
+    
+    return true;
+  });
+
+  // Pagination logic: slice filtered links
+  const totalPages = Math.ceil(filteredLinks.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedLinks = filteredLinks.slice(startIndex, endIndex);
+
+  // Handle filter change (reset to page 1)
+  const handleFilterChange = (status: FilterStatus) => {
+    setFilterStatus(status);
+    setCurrentPage(1);
+  };
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
   return (
@@ -204,14 +252,41 @@ const Dashboard = () => {
               transition={{ delay: 0.3 }}
               className="bg-card border border-border/50 rounded-2xl shadow-soft overflow-hidden"
             >
-              <div className="p-6 border-b border-border/50 flex items-center justify-between">
-                <h2 className="font-semibold text-foreground">Payment Links</h2>
-                <Link to="/create">
-                  <Button size="sm">
-                    <Plus className="w-4 h-4" />
-                    Create Link
-                  </Button>
-                </Link>
+              <div className="p-6 border-b border-border/50">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-foreground">Payment Links</h2>
+                  <Link to="/create">
+                    <Button size="sm">
+                      <Plus className="w-4 h-4" />
+                      Create Link
+                    </Button>
+                  </Link>
+                </div>
+                
+                {/* Status Filter */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground mr-2">Filter:</span>
+                  <div className="inline-flex rounded-lg border border-border/50 p-1 bg-muted/30">
+                    {(['all', 'active', 'paid', 'expired'] as FilterStatus[]).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => handleFilterChange(status)}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                          filterStatus === status
+                            ? 'bg-background text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  {filteredLinks.length !== links.length && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {filteredLinks.length} of {links.length}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Info Alert */}
@@ -283,7 +358,7 @@ const Dashboard = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
-                      {links.map((link) => {
+                      {paginatedLinks.map((link) => {
                         // Check if link is expired
                         const isExpired = link.expiresAt && Date.now() > link.expiresAt;
                         const displayStatus = isExpired ? 'expired' : link.status;
@@ -385,6 +460,71 @@ const Dashboard = () => {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+              
+              {/* Pagination Controls */}
+              {!linksLoading && filteredLinks.length > ITEMS_PER_PAGE && (
+                <div className="px-6 py-4 border-t border-border/50 flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {startIndex + 1}-{Math.min(endIndex, filteredLinks.length)} of {filteredLinks.length}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                        // Show first page, last page, current page, and pages around current
+                        const showPage = 
+                          page === 1 || 
+                          page === totalPages || 
+                          (page >= currentPage - 1 && page <= currentPage + 1);
+                        
+                        if (!showPage) {
+                          // Show ellipsis
+                          if (page === currentPage - 2 || page === currentPage + 2) {
+                            return (
+                              <span key={page} className="px-2 text-muted-foreground">
+                                ⋯
+                              </span>
+                            );
+                          }
+                          return null;
+                        }
+                        
+                        return (
+                          <Button
+                            key={page}
+                            variant={currentPage === page ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => handlePageChange(page)}
+                            className="h-8 w-8 p-0"
+                          >
+                            {page}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </motion.div>
