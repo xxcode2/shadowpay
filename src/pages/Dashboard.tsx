@@ -9,11 +9,25 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
-  Info
+  Info,
+  Shield,
+  MoreVertical
 } from "lucide-react";
 import { toast } from 'sonner';
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Link } from "react-router-dom";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -225,14 +239,11 @@ const Dashboard = () => {
                   <h3 className="text-lg font-semibold text-foreground mb-2">
                     No payment links yet
                   </h3>
-                  <p className="text-muted-foreground mb-6">
-                    Create your first payment link to start receiving funds privately
+                  <p className="text-muted-foreground">
+                    Create payment links to receive crypto without revealing your wallet address.
                   </p>
-                  <Link to="/create">
-                    <Button>
-                      <Plus className="w-4 h-4" />
-                      Create Your First Link
-                    </Button>
+                  <Link to="/create" className="inline-flex items-center gap-1 text-primary hover:underline mt-2">
+                    Create your first private payment link →
                   </Link>
                 </div>
               ) : (
@@ -251,7 +262,17 @@ const Dashboard = () => {
                           Status
                         </th>
                         <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                          Payments
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger className="flex items-center gap-1 cursor-help">
+                                Uses
+                                <Info className="w-3 h-3" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">Number of successful payments made using this link</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </th>
                         <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                           Created
@@ -262,62 +283,106 @@ const Dashboard = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
-                      {links.map((link) => (
-                        <tr key={link.linkId} className="hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4">
-                            <span className="font-medium text-foreground">
-                              {link.amountType === 'any' ? 'Any amount' : `${link.amount} ${link.token}`}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-sm text-muted-foreground capitalize">
-                              {link.linkUsageType === 'one-time' ? 'One-time' : 'Reusable'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span
-                              className={`px-2 py-1 rounded-md text-xs font-medium ${
-                                link.status === 'active'
-                                  ? 'bg-green-500/10 text-green-600'
-                                  : link.status === 'paid'
-                                  ? 'bg-blue-500/10 text-blue-600'
-                                  : 'bg-muted text-muted-foreground'
-                              }`}
-                            >
-                              {link.status === 'active' ? 'Active' : link.status === 'paid' ? 'Paid' : 'Expired'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-foreground">
-                            {link.paymentCount}
-                          </td>
-                          <td className="px-6 py-4 text-muted-foreground text-sm">
-                            {formatDate(link.createdAt)}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8"
-                                onClick={() => handleCopyLink(link.url)}
-                                title="Copy link"
-                              >
-                                <Copy className="w-4 h-4" />
-                              </Button>
-                              <a 
-                                href={link.url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                title="Open link"
-                              >
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <ExternalLink className="w-4 h-4" />
-                                </Button>
-                              </a>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {links.map((link) => {
+                        // Check if link is expired
+                        const isExpired = link.expiresAt && Date.now() > link.expiresAt;
+                        const displayStatus = isExpired ? 'expired' : link.status;
+                        
+                        return (
+                          <tr key={link.linkId} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-6 py-4">
+                              <span className="font-medium text-foreground">
+                                {link.amountType === 'any' ? 'Any amount' : `${link.amount} ${link.token}`}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-muted-foreground capitalize">
+                                {link.linkUsageType === 'one-time' ? 'One-time' : 'Reusable'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`px-2 py-1 rounded-md text-xs font-medium ${
+                                    displayStatus === 'active'
+                                      ? 'bg-green-500/10 text-green-600'
+                                      : displayStatus === 'paid'
+                                      ? 'bg-blue-500/10 text-blue-600'
+                                      : 'bg-muted text-muted-foreground'
+                                  }`}
+                                >
+                                  {displayStatus === 'active' ? 'Active' : displayStatus === 'paid' ? 'Paid' : 'Expired'}
+                                </span>
+                                {displayStatus === 'paid' && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger>
+                                        <Shield className="w-3.5 h-3.5 text-primary" />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs">Funds secured in Privacy Cash pool</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-foreground">
+                              {link.paymentCount}
+                            </td>
+                            <td className="px-6 py-4 text-muted-foreground text-sm">
+                              {formatDate(link.createdAt)}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-end gap-1">
+                                {/* Primary Action: Open Link */}
+                                <a 
+                                  href={link.url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                >
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="h-8 px-3 text-xs"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                                    Open
+                                  </Button>
+                                </a>
+                                
+                                {/* Secondary Actions: Dropdown */}
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreVertical className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleCopyLink(link.url)}>
+                                      <Copy className="w-4 h-4 mr-2" />
+                                      Copy Link
+                                    </DropdownMenuItem>
+                                    {displayStatus === 'paid' && link.paidAt && (
+                                      <DropdownMenuItem asChild>
+                                        <a
+                                          href={`https://explorer.solana.com/address/${link.linkId}?cluster=devnet`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center"
+                                        >
+                                          <ExternalLink className="w-4 h-4 mr-2" />
+                                          View on Explorer
+                                        </a>
+                                      </DropdownMenuItem>
+                                    )}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
