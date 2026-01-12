@@ -28,11 +28,7 @@ export function useWallet() {
       if (wallet) {
         try {
           const phantom = (window as any).phantom?.solana;
-          
           if (!phantom) {
-            console.warn("Phantom not found, clearing stored wallet data");
-            localStorage.removeItem("shadowpay_wallet");
-            localStorage.removeItem("shadowpay_token");
             setState({
               connected: false,
               publicKey: null,
@@ -42,10 +38,8 @@ export function useWallet() {
             });
             return;
           }
-
           // Check if Phantom is already connected
           if (phantom.isConnected) {
-            console.log("✅ Wallet already connected to Phantom:", wallet.slice(0, 8) + "...");
             setState({
               connected: true,
               publicKey: wallet,
@@ -55,13 +49,10 @@ export function useWallet() {
             });
           } else {
             // Try to reconnect silently
-            console.log("🔄 Attempting silent reconnection...");
             try {
               const resp = await phantom.connect({ onlyIfTrusted: true });
               const publicKey = resp.publicKey?.toString();
-              
               if (publicKey && publicKey === wallet) {
-                console.log("✅ Silently reconnected:", publicKey.slice(0, 8) + "...");
                 setState({
                   connected: true,
                   publicKey,
@@ -70,10 +61,6 @@ export function useWallet() {
                   error: null,
                 });
               } else {
-                // Clear stored data if wallet changed
-                console.warn("Wallet address changed, clearing stored data");
-                localStorage.removeItem("shadowpay_wallet");
-                localStorage.removeItem("shadowpay_token");
                 setState({
                   connected: false,
                   publicKey: null,
@@ -83,10 +70,6 @@ export function useWallet() {
                 });
               }
             } catch (err) {
-              // Silent reconnect failed, user needs to connect manually
-              const errMsg = err instanceof Error ? err.message : String(err);
-              console.log("ℹ️ Silent reconnect failed, manual connection required");
-              console.log("Reconnect error details:", errMsg);
               setState({
                 connected: false,
                 publicKey: null,
@@ -97,7 +80,13 @@ export function useWallet() {
             }
           }
         } catch (err) {
-          console.error("Error initializing wallet:", err);
+          setState({
+            connected: false,
+            publicKey: null,
+            token: null,
+            loading: false,
+            error: null,
+          });
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error("Init error details:", errMsg);
           setState({

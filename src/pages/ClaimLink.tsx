@@ -68,26 +68,7 @@ const ClaimLink = () => {
     }
 
     try {
-      // Validate link exists and is claimable - stored in localStorage
-      const storedLinkStr = localStorage.getItem(`link_${linkId}`);
-      if (!storedLinkStr) {
-        throw new Error(`Link not found: ${linkId}`);
-      }
-
-      const storedLink = JSON.parse(storedLinkStr);
-      if (storedLink.status !== "paid") {
-        throw new Error(
-          `Link is not ready to claim. Status: ${storedLink.status}`
-        );
-      }
-
-      if (!storedLink.commitment) {
-        throw new Error(
-          "Link has no commitment. Cannot claim. Contact the sender."
-        );
-      }
-
-      // Attempt claim
+      // Validate link exists and is claimable via backend
       const result = await claim(linkId, recipientAddress);
       setClaimedLink(result);
       setShowSuccess(true);

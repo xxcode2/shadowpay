@@ -88,8 +88,7 @@ export async function walletLogin(wallet: WalletAdapter): Promise<string> {
     }
 
     const { token } = await res.json();
-    localStorage.setItem("shadowpay_token", token);
-    localStorage.setItem("shadowpay_wallet", publicKey);
+    // Only use localStorage for UX cache, not for state
     return token;
   } catch (err) {
     console.error("Login error:", err);

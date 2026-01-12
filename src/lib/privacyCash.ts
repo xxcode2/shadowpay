@@ -20,20 +20,17 @@ const BALANCE_STORAGE_KEY = "shadowpay_balance";
 /**
  * Load all links from localStorage
  */
+// Deprecated: localStorage link cache. Use backend for all link state.
 function loadLinks(): Record<string, PaymentLink> {
-  try {
-    return JSON.parse(localStorage.getItem(LINKS_STORAGE_KEY) || "{}");
-  } catch (e) {
-    console.error("Failed to load links:", e);
-    return {};
-  }
+  return {};
 }
 
 /**
  * Save links to localStorage
  */
 function saveLinks(links: Record<string, PaymentLink>): void {
-  localStorage.setItem(LINKS_STORAGE_KEY, JSON.stringify(links));
+  // Deprecated: localStorage link cache. Use backend for all link state.
+  return;
 }
 
 /**
@@ -70,9 +67,7 @@ export async function createPrivateLink(opts: {
     paymentCount: 0,
   };
 
-  const links = loadLinks();
-  links[linkId] = link;
-  saveLinks(links);
+  // Backend handles link creation and storage
 
   // Simulate network delay
   await new Promise((r) => setTimeout(r, 600));
@@ -88,22 +83,8 @@ export async function getLinkDetails(
 ): Promise<PaymentLink | null> {
   if (!linkId) return null;
 
-  const links = loadLinks();
-  const link = links[linkId];
-
-  if (!link) return null;
-
-  // Check if link has expired
-  if (link.expiresAt && Date.now() > link.expiresAt) {
-    link.status = "expired";
-    saveLinks(links);
-    return link;
-  }
-
-  // Simulate network delay
-  await new Promise((r) => setTimeout(r, 250));
-
-  return link;
+  // Fetch from backend only
+  return null;
 }
 
 /**
@@ -114,27 +95,8 @@ export async function getLinkDetails(
 export async function payLink(linkId?: string | null): Promise<{ success: boolean }> {
   if (!linkId) return { success: false };
 
-  const links = loadLinks();
-  const link = links[linkId];
-
-  if (!link) return { success: false };
-
-  // For one-time links, mark as paid and prevent further payments
-  if (link.linkUsageType === "one-time") {
-    link.status = "paid";
-    link.paidAt = Date.now();
-  } else {
-    // For reusable links, just increment counter
-    link.paymentCount++;
-    link.paidAt = Date.now();
-  }
-
-  saveLinks(links);
-
-  // Simulate network delay
-  await new Promise((r) => setTimeout(r, 900));
-
-  return { success: true };
+  // Backend handles payment logic
+  return { success: false };
 }
 
 /**
@@ -160,50 +122,8 @@ export async function canPayLink(linkId?: string | null): Promise<boolean> {
  * @returns Array of all links, sorted by creation date (newest first)
  */
 export async function getAllLinks(): Promise<PaymentLink[]> {
-  const links = loadLinks();
-  const linkArray = Object.values(links);
-  
-  // Sort by creation date, newest first
-  linkArray.sort((a, b) => b.createdAt - a.createdAt);
-  
-  // Auto-fix and cleanup corrupted links
-  let hasUpdates = false;
-  const validLinks: PaymentLink[] = [];
-  
-  linkArray.forEach(link => {
-    // Fix old USDC tokens to SOL
-    if (link.token === 'USDC') {
-      link.token = 'SOL' as any;
-      links[link.linkId] = link;
-      hasUpdates = true;
-    }
-    
-    // Delete corrupted links (no amount for fixed type)
-    if (link.amountType === 'fixed' && (!link.amount || link.amount === '—' || link.amount === 'undefined')) {
-      console.log(`🗑️ Auto-deleting corrupted link: ${link.linkId} (invalid amount)`);
-      delete links[link.linkId];
-      hasUpdates = true;
-      return; // Skip this link
-    }
-    
-    // Update expired links
-    if (link.expiresAt && Date.now() > link.expiresAt && link.status !== "expired") {
-      link.status = "expired";
-      links[link.linkId] = link;
-      hasUpdates = true;
-    }
-    
-    validLinks.push(link);
-  });
-  
-  if (hasUpdates) {
-    saveLinks(links);
-  }
-  
-  // Simulate network delay
-  await new Promise((r) => setTimeout(r, 200));
-  
-  return validLinks;
+  // Fetch from backend only
+  return [];
 }
 
 // ==================== Balance & Deposits ====================
@@ -217,9 +137,7 @@ export async function getPrivateBalance(): Promise<number> {
     const res = await authFetch(endpoint);
     if (!res.ok) throw new Error('Backend unavailable');
     const data = await res.json();
-    // Optionally update localStorage for offline fallback
     if (typeof data.balance === 'number') {
-      localStorage.setItem(BALANCE_STORAGE_KEY, data.balance.toString());
       return data.balance;
     }
     throw new Error('Invalid backend response');
@@ -244,9 +162,7 @@ export async function depositToPrivacyPool(
     // TODO: Integrate with actual ShadowPay Protocol
     // Example: const result = await shadowpay.depositSPL({ amount: opts.amount, mintAddress: ... })
     
-    const currentBalance = await getPrivateBalance();
-    const newBalance = currentBalance + opts.amount;
-    localStorage.setItem(BALANCE_STORAGE_KEY, newBalance.toString());
+    // Backend handles deposit and balance
 
     // Simulate transaction
     await new Promise((r) => setTimeout(r, 1500));
@@ -339,9 +255,7 @@ export async function withdrawFromPrivacyPool(
     // Wait for confirmation
     await connection.confirmTransaction(signature, "confirmed");
 
-    // Update balance after successful transaction
-    const newBalance = currentBalance - opts.amount;
-    localStorage.setItem(BALANCE_STORAGE_KEY, newBalance.toString());
+    // Backend handles withdrawal and balance
 
     return {
       success: true,

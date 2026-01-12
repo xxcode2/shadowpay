@@ -46,7 +46,7 @@ const PayLink = () => {
       return;
     }
     
-    // Fallback to localStorage or backend
+    // Only use backend for link state and expiry
     (async () => {
       try {
         const apiUrl = import.meta.env.VITE_API_URL || '';
@@ -57,37 +57,11 @@ const PayLink = () => {
           const d = json.link;
           setPaymentData({ amount: d.amountType === 'any' ? undefined : d.amount, token: d.token });
           return;
+        } else {
+          setError('Link not found or expired.');
         }
       } catch (e) {
-        // fallback to stub
-      }
-
-      const d = await getLinkDetails(id);
-      if (d) {
-        // Auto-delete corrupted links
-        if (d.amountType === 'fixed' && (!d.amount || d.amount === '—' || d.amount === 'undefined')) {
-          console.log('🗑️ Corrupted link detected, cleaning up...');
-          const links = JSON.parse(localStorage.getItem('shadowpay_links') || '{}');
-          delete links[id || ''];
-          localStorage.setItem('shadowpay_links', JSON.stringify(links));
-          setError('This link is corrupted and has been removed. Please ask sender to create a new link.');
-          setTimeout(() => window.location.href = '/', 3000);
-          return;
-        }
-        
-        // Check if link has expired
-        const storedLink = localStorage.getItem(`link_${id}`);
-        if (storedLink) {
-          const linkData = JSON.parse(storedLink);
-          if (linkData.expiryTimestamp && Date.now() > linkData.expiryTimestamp) {
-            setError('This payment link has expired');
-            return;
-          }
-        }
-        setPaymentData({ amount: d.amountType === 'any' ? undefined : d.amount, token: d.token });
-      } else {
-        // Link not found in localStorage (user doesn't have it)
-        setError('⚠️ Demo Mode Limitation: Links are stored in browser localStorage. Each user needs to create their own links. For production, use backend database for real link sharing.');
+        setError('Failed to fetch link details from backend.');
       }
     })();
   }, []);
@@ -105,20 +79,7 @@ const PayLink = () => {
       return;
     }
 
-    // Check if link has expired
-    if (linkId) {
-      const storedLink = localStorage.getItem(`link_${linkId}`);
-      if (storedLink) {
-        const linkData = JSON.parse(storedLink);
-        if (linkData.expiryTimestamp && Date.now() > linkData.expiryTimestamp) {
-          setError('This payment link has expired');
-          toast.error('Link Expired', {
-            description: 'This payment link is no longer valid',
-          });
-          return;
-        }
-      }
-    }
+    // Expiry check handled by backend
 
     if (!paymentData?.amount) {
       setError("Invalid payment amount");
@@ -262,27 +223,39 @@ const PayLink = () => {
       setTxSignature(signature);
       setExplorerUrl(explorer);
 
-      // Update localStorage for demo
-      await payLink(linkId);
-      
-      // Add funds to Privacy Cash balance (simulate deposit to privacy pool)
+      // === NEW LOGIC: Sync payment metadata to backend ===
       try {
-        const depositAmount = parseFloat(paymentData.amount);
-        await depositToPrivacyPool({
-          amount: depositAmount,
-          token: paymentData.token as any || 'SOL',
+        const apiUrl = import.meta.env.VITE_API_URL || '';
+        const confirmEndpoint = apiUrl ? `${apiUrl}/payments/confirm` : '/payments/confirm';
+        const confirmRes = await fetch(confirmEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            link_id: linkId,
+            tx_hash: signature,
+            amount: paymentData.amount,
+            payer_wallet: publicKey,
+          }),
         });
-        console.log(`💰 Added ${depositAmount} ${paymentData.token} to privacy pool balance`);
+        if (!confirmRes.ok) {
+          const errData = await confirmRes.json();
+          throw new Error(errData.error || 'Failed to sync payment metadata');
+        }
+        console.log('✅ Payment metadata synced to backend');
       } catch (err) {
-        console.warn('Failed to update balance:', err);
+        console.error('❌ Failed to sync payment metadata:', err);
+        toast.error('Payment Metadata Sync Failed', {
+          description: err instanceof Error ? err.message : String(err),
+        });
       }
-      
+
+      // === END NEW LOGIC ===
+
       // Show success toast
       toast.success('Payment Confirmed!', {
         description: `Transaction sent successfully. View on explorer.`,
       });
-      
-      setTimeout(() => setPaymentState("success"), 400);
+      setTimeout(() => setPaymentState('success'), 400);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Payment failed";
       console.error("❌ Payment error:", message);

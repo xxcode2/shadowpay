@@ -58,4 +58,49 @@ app.post('/api/balance', async (req, res) => {
   res.json({ balance: data[0].balance });
 });
 
+// Confirm Payment (metadata sync)
+app.post('/payments/confirm', async (req, res) => {
+  const { link_id, tx_hash, amount, payer_wallet } = req.body;
+
+  // Get payment link
+  const { data: link, error: linkError } = await supabase
+    .from('payment_links')
+    .select('id, creator_id, link_usage_type, payment_count, status')
+    .eq('link_id', link_id)
+    .single();
+  if (linkError || !link) return res.status(400).json({ error: 'Link not found' });
+
+  // Insert payment
+  const { data: payment, error: paymentError } = await supabase
+    .from('payments')
+    .insert([{ link_id: link.id, payer_wallet, amount, tx_hash }]);
+  if (paymentError) return res.status(400).json({ error: paymentError.message });
+
+  // Update payment_links: increment payment_count, set status if one-time
+  let newStatus = link.status;
+  if (link.link_usage_type === 'one-time') newStatus = 'paid';
+  const { error: updateLinkError } = await supabase
+    .from('payment_links')
+    .update({ payment_count: link.payment_count + 1, status: newStatus })
+    .eq('id', link.id);
+  if (updateLinkError) return res.status(400).json({ error: updateLinkError.message });
+
+  // Update balances for creator
+  const { data: balanceRow, error: balanceError } = await supabase
+    .from('balances')
+    .select('balance')
+    .eq('user_id', link.creator_id)
+    .single();
+  let newBalance = amount;
+  if (balanceRow && typeof balanceRow.balance === 'number') {
+    newBalance = parseFloat(balanceRow.balance) + parseFloat(amount);
+  }
+  const { error: updateBalanceError } = await supabase
+    .from('balances')
+    .upsert([{ user_id: link.creator_id, balance: newBalance, updated_at: new Date() }], { onConflict: ['user_id'] });
+  if (updateBalanceError) return res.status(400).json({ error: updateBalanceError.message });
+
+  res.json({ success: true });
+});
+
 module.exports = app;

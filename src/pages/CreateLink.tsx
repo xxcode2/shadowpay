@@ -69,16 +69,7 @@ const CreateLink = () => {
         linkUsageType,
       });
       
-      // Add expiry to link metadata if specified
-      if (expiryHours && link.linkId) {
-        const expiryTimestamp = Date.now() + (parseFloat(expiryHours) * 60 * 60 * 1000);
-        const storedLink = localStorage.getItem(`link_${link.linkId}`);
-        if (storedLink) {
-          const linkData = JSON.parse(storedLink);
-          linkData.expiryTimestamp = expiryTimestamp;
-          localStorage.setItem(`link_${link.linkId}`, JSON.stringify(linkData));
-        }
-      }
+      // Expiry handled by backend
       
       setGeneratedLink(link.url);
       setLinkCreated(true);
