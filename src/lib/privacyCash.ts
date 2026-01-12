@@ -208,14 +208,26 @@ export async function getAllLinks(): Promise<PaymentLink[]> {
 
 // ==================== Balance & Deposits ====================
 
-/**
- * Get current private balance from local state
- * In production: would query ShadowPay smart contract
- */
+import { authFetch } from "./auth";
+
 export async function getPrivateBalance(): Promise<number> {
-  const balance = localStorage.getItem(BALANCE_STORAGE_KEY);
-  await new Promise((r) => setTimeout(r, 300));
-  return balance ? parseFloat(balance) : 0;
+  try {
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    const endpoint = apiUrl ? `${apiUrl}/api/balance` : '/api/balance';
+    const res = await authFetch(endpoint);
+    if (!res.ok) throw new Error('Backend unavailable');
+    const data = await res.json();
+    // Optionally update localStorage for offline fallback
+    if (typeof data.balance === 'number') {
+      localStorage.setItem(BALANCE_STORAGE_KEY, data.balance.toString());
+      return data.balance;
+    }
+    throw new Error('Invalid backend response');
+  } catch (err) {
+    // Fallback to localStorage if backend fails
+    const balance = localStorage.getItem(BALANCE_STORAGE_KEY);
+    return balance ? parseFloat(balance) : 0;
+  }
 }
 
 /**
@@ -349,9 +361,28 @@ export default {
   createPrivateLink,
   getLinkDetails,
   payLink,
-  canPayLink,
-  getAllLinks,
-  getPrivateBalance,
-  depositToPrivacyPool,
-  withdrawFromPrivacyPool,
-};
+export async function getAllLinks(): Promise<PaymentLink[]> {
+  try {
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    const endpoint = apiUrl ? `${apiUrl}/api/links` : '/api/links';
+    const res = await authFetch(endpoint);
+    if (!res.ok) throw new Error('Backend unavailable');
+    const data = await res.json();
+    if (Array.isArray(data.links)) {
+      // Optionally update localStorage for offline fallback
+      const linksObj: Record<string, PaymentLink> = {};
+      data.links.forEach((link: PaymentLink) => {
+        linksObj[link.linkId] = link;
+      });
+      saveLinks(linksObj);
+      return data.links;
+    }
+    throw new Error('Invalid backend response');
+  } catch (err) {
+    // Fallback to localStorage if backend fails
+    const links = loadLinks();
+    const linkArray = Object.values(links);
+    linkArray.sort((a, b) => b.createdAt - a.createdAt);
+    return linkArray;
+  }
+}

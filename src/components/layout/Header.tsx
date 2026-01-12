@@ -25,33 +25,9 @@ const Header = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo - ShadowPay with gravity effect */}
           <Link to="/" className="flex items-center group">
-            <style>{`
-              @keyframes gravity-float {
-                0%, 100% {
-                  transform: translateY(0px) scaleY(1);
-                  letter-spacing: -0.05em;
-                }
-                50% {
-                  transform: translateY(-8px) scaleY(0.95);
-                  letter-spacing: 0.02em;
-                }
-              }
-              .gravity-text {
-                font-size: 1.5rem;
-                font-weight: 800;
-                font-family: 'Courier New', monospace;
-                letter-spacing: -0.05em;
-                background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                text-shadow: 0 0 30px rgba(167, 139, 250, 0.5);
-                filter: drop-shadow(0 4px 8px rgba(124, 58, 237, 0.3));
-                animation: gravity-float 3s ease-in-out infinite;
-                transform-origin: center;
-              }
-            `}</style>
-            <span className="gravity-text">ShadowPay</span>
+            <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#111', fontFamily: 'Courier New, monospace', letterSpacing: '-0.05em' }}>
+              ShadowPay
+            </span>
           </Link>
 
           {/* Desktop Nav */}
