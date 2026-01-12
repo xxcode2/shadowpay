@@ -57,7 +57,9 @@ const Dashboard = () => {
       try {
         setBalanceLoading(true);
         setLinksLoading(true);
+        console.log('Fetching dashboard data...');
         const { balance, links } = await fetchDashboardData();
+        console.log('Fetched data:', { balance, linksCount: links.length });
         setPrivateBalance(balance);
         setLinks(links);
       } catch (error) {

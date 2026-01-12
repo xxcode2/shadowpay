@@ -17,22 +17,35 @@ export async function withdrawFromBackend(opts: { user_id: string; amount: numbe
   return res.json();
 }
 
-// Add the missing fetchDashboardData function
+// Add the missing fetchDashboardData function with better error handling
 export async function fetchDashboardData(): Promise<{ balance: number; links: any[] }> {
-  // Assuming you have API endpoints for both balance and links
-  const [balanceRes, linksRes] = await Promise.all([
-    fetch('/api/balance'),
-    fetch('/api/payment-links')
-  ]);
-
-  if (!balanceRes.ok) throw new Error("Failed to fetch balance");
-  if (!linksRes.ok) throw new Error("Failed to fetch payment links");
-
-  const balanceData = await balanceRes.json();
-  const linksData = await linksRes.json();
-
-  return {
-    balance: balanceData.balance,
-    links: linksData.links || []
-  };
+  try {
+    // Try to fetch balance first
+    const balanceRes = await fetch('/api/balance');
+    if (!balanceRes.ok) {
+      console.error('Balance API error:', await balanceRes.text());
+      throw new Error("Failed to fetch balance");
+    }
+    const balanceData = await balanceRes.json();
+    
+    // Try to fetch payment links
+    const linksRes = await fetch('/api/payment-links');
+    if (!linksRes.ok) {
+      console.error('Payment links API error:', await linksRes.text());
+      throw new Error("Failed to fetch payment links");
+    }
+    const linksData = await linksRes.json();
+    
+    return {
+      balance: balanceData.balance || 0,
+      links: Array.isArray(linksData.links) ? linksData.links : []
+    };
+  } catch (error) {
+    console.error('Error in fetchDashboardData:', error);
+    // Return default values if API fails
+    return {
+      balance: 0,
+      links: []
+    };
+  }
 }
