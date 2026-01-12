@@ -2,11 +2,12 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import { PrivacyCash } from "privacycash";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, Connection, Keypair } from "@solana/web3.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { verifySignature, generateToken, authMiddleware } from "./auth.js";
+import * as privacyCashService from "./privacyCashService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -216,24 +217,24 @@ app.get("/links/:id", async (req, res) => {
 /**
  * POST /links/:id/pay
  * 
- * DEPOSIT TO SHADOWPAY PRIVACY POOL
+ * DEPOSIT TO PRIVACY CASH POOL
  * Called by frontend when payer wants to send funds
  * 
  * This endpoint:
- * 1. Calls ShadowPay.deposit() to send funds to pool
+ * 1. Calls Privacy Cash SDK to deposit funds to pool
  * 2. Gets commitment back (proof of deposit)
  * 3. Stores commitment in link metadata (enables future withdrawal)
  * 4. Marks link as "paid"
  * 
- * CRITICAL: Funds are NOT in ShadowPay backend — they're in ShadowPay privacy pool
- * The commitment is proof that ShadowPay protocol holds the funds for this link
+ * CRITICAL: Funds are NOT in ShadowPay backend — they're in Privacy Cash pool
+ * The commitment is proof that Privacy Cash protocol holds the funds for this link
  * 
- * Body: { amount, token }
+ * Body: { amount, token, referrer }
  * Returns: { link: { ...metadata with commitment } }
  */
 app.post("/links/:id/pay", async (req, res) => {
   try {
-    const { amount, token } = req.body;
+    const { amount, token, referrer } = req.body;
     const map = await loadLinks();
     const link = map[req.params.id];
     
@@ -255,29 +256,57 @@ app.post("/links/:id/pay", async (req, res) => {
     }
 
     try {
-      // Call ShadowPay Protocol to deposit
-      const c = initClient();
-      const commitment = await c.deposit({ amount, token });
+      let result;
+      
+      if (!process.env.PRIVACY_CASH_ENABLED || process.env.PRIVACY_CASH_ENABLED === "false") {
+        // Fallback: Demo mode without actual Privacy Cash
+        result = {
+          tx: `demo_${Date.now()}`,
+          commitment: `commitment_${Math.random().toString(36).slice(2, 9)}`,
+          amount,
+          token,
+          timestamp: Date.now()
+        };
+      } else {
+        // Use Privacy Cash service
+        if (token === "SOL") {
+          // Deposit SOL (convert amount to lamports)
+          const lamports = BigInt(amount * 1e9);
+          result = await privacyCashService.depositSOL({
+            lamports,
+            referrer
+          });
+        } else {
+          // Deposit SPL token
+          const splAmount = BigInt(amount * 1e6); // Assume 6 decimals
+          result = await privacyCashService.depositSPL({
+            mintAddress: token,
+            amount: splAmount,
+            referrer
+          });
+        }
+      }
 
-      if (!commitment) {
+      if (!result || !result.commitment) {
         return res.status(500).json({ 
-          error: "Deposit succeeded but no commitment returned. This should not happen." 
+          error: "Deposit to Privacy Cash pool failed - no commitment returned"
         });
       }
 
       // Update link metadata with commitment and status
       link.paid = true;
       link.status = "paid";
-      link.commitment = commitment;
+      link.commitment = result.commitment;
+      link.txHash = result.tx;
       link.paidAt = Date.now();
       map[req.params.id] = link;
       await saveLinks(map);
 
-      return res.json({ success: true, link });
+      return res.json({ success: true, link, result });
     } catch (sdkErr) {
-      console.error("ShadowPay deposit error:", sdkErr);
+      console.error("Privacy Cash deposit error:", sdkErr);
       return res.status(500).json({ 
-        error: "Deposit to ShadowPay privacy pool failed",
+        error: "Deposit to Privacy Cash pool failed",
         details: sdkErr.message 
       });
     }
@@ -290,18 +319,18 @@ app.post("/links/:id/pay", async (req, res) => {
 /**
  * POST /links/:id/claim (PROTECTED - requires JWT)
  * 
- * WITHDRAW FROM SHADOWPAY PRIVACY POOL
+ * WITHDRAW FROM PRIVACY CASH POOL
  * Called by recipient to claim/withdraw funds
  * 
  * This endpoint:
  * 1. Validates JWT (recipient authenticated)
  * 2. Loads link and validates it's been paid
- * 3. Uses commitment to withdraw from ShadowPay privacy pool
+ * 3. Uses commitment to withdraw from Privacy Cash pool
  * 4. Funds transfer directly to recipient wallet
  * 5. Marks link as "withdrawn"
  * 
- * CRITICAL: Funds come from ShadowPay privacy pool, NOT ShadowPay backend
- * We use the commitment to tell ShadowPay protocol which deposit to release
+ * CRITICAL: Funds come from Privacy Cash pool, NOT ShadowPay backend
+ * We use the commitment to tell Privacy Cash protocol which deposit to release
  * Recipient receives funds DIRECTLY — we never touch them
  * 
  * Body: { recipientWallet }
@@ -344,48 +373,64 @@ app.post("/links/:id/claim", authMiddleware, async (req, res) => {
     if (!link.commitment) {
       return res.status(500).json({ 
         error: "CRITICAL: Link marked paid but no commitment found. " +
-               "This indicates deposit to ShadowPay privacy pool did not complete."
+               "This indicates deposit to Privacy Cash pool did not complete."
       });
     }
 
     try {
-      // Call ShadowPay Protocol to withdraw using commitment
-      const c = initClient();
-      
-      // Determine token type and call appropriate method
-      const isSOL = link.token === "SOL";
+      // Use Privacy Cash service to withdraw using commitment
       let result;
 
-      if (isSOL) {
-        // Withdraw SOL (measured in lamports)
-        result = await c.withdraw({
-          lamports: BigInt(link.amount || 1000000), // 1 SOL default
-          recipientAddress: recipientWallet
-        });
+      if (!process.env.PRIVACY_CASH_ENABLED || process.env.PRIVACY_CASH_ENABLED === "false") {
+        // Fallback: Demo mode without actual Privacy Cash
+        result = {
+          tx: `demo_withdraw_${Date.now()}`,
+          amount: link.amount,
+          recipient: recipientWallet,
+          isPartial: false,
+          fee: 0,
+          timestamp: Date.now()
+        };
       } else {
-        // Withdraw SPL (USDC, USDT, etc.)
-        result = await c.withdrawSPL({
-          mintAddress: new PublicKey(link.token),
-          amount: BigInt(link.amount * 1e6), // Assume 6 decimals
-          recipientAddress: recipientWallet
-        });
+        // Determine token type and call appropriate method
+        const isSOL = link.token === "SOL";
+
+        if (isSOL) {
+          // Withdraw SOL (measured in lamports)
+          const lamports = BigInt(link.amount * 1e9);
+          result = await privacyCashService.withdrawSOL({
+            recipientAddress: recipientWallet,
+            lamports,
+            referrer: link.referrer
+          });
+        } else {
+          // Withdraw SPL (USDC, USDT, etc.)
+          const splAmount = BigInt(link.amount * 1e6); // Assume 6 decimals
+          result = await privacyCashService.withdrawSPL({
+            mintAddress: link.token,
+            recipientAddress: recipientWallet,
+            amount: splAmount,
+            referrer: link.referrer
+          });
+        }
       }
 
       // Update link metadata
       link.status = "withdrawn";
       link.withdrawnAt = Date.now();
+      link.withdrawTxHash = result.tx;
       map[req.params.id] = link;
       await saveLinks(map);
 
       return res.json({ 
         success: true, 
         link,
-        txHash: result.signature || result.txHash || "pending"
+        txHash: result.tx || "pending"
       });
     } catch (sdkErr) {
-      console.error("ShadowPay withdrawal error:", sdkErr);
+      console.error("Privacy Cash withdrawal error:", sdkErr);
       return res.status(500).json({ 
-        error: "Withdrawal from ShadowPay privacy pool failed",
+        error: "Withdrawal from Privacy Cash pool failed",
         details: sdkErr.message 
       });
     }
@@ -419,7 +464,6 @@ app.post("/links/:id/claim", authMiddleware, async (req, res) => {
  */
 app.post("/withdraw/spl", authMiddleware, async (req, res) => {
   try {
-    const c = initClient();
     const { mint, amount, recipient } = req.body;
     
     if (!mint || !amount || !recipient) {
@@ -427,9 +471,12 @@ app.post("/withdraw/spl", authMiddleware, async (req, res) => {
     }
     
     try {
-      const mintAddress = new PublicKey(mint);
-      const result = await c.withdrawSPL({ 
-        mintAddress, 
+      // Validate mint address
+      new PublicKey(mint);
+      new PublicKey(recipient);
+
+      const result = await privacyCashService.withdrawSPL({ 
+        mintAddress: mint, 
         amount: BigInt(amount),
         recipientAddress: recipient 
       });
@@ -437,7 +484,7 @@ app.post("/withdraw/spl", authMiddleware, async (req, res) => {
       return res.json({ 
         success: true, 
         result,
-        txHash: result.signature || result.txHash || "pending"
+        txHash: result.tx || "pending"
       });
     } catch (sdkErr) {
       console.error("SDK Error:", sdkErr);
@@ -463,7 +510,6 @@ app.post("/withdraw/spl", authMiddleware, async (req, res) => {
  */
 app.post("/withdraw/sol", authMiddleware, async (req, res) => {
   try {
-    const c = initClient();
     const { lamports, recipient } = req.body;
     
     if (!lamports || !recipient) {
@@ -471,7 +517,10 @@ app.post("/withdraw/sol", authMiddleware, async (req, res) => {
     }
     
     try {
-      const result = await c.withdraw({ 
+      // Validate recipient address
+      new PublicKey(recipient);
+
+      const result = await privacyCashService.withdrawSOL({ 
         lamports: BigInt(lamports),
         recipientAddress: recipient 
       });
@@ -479,7 +528,7 @@ app.post("/withdraw/sol", authMiddleware, async (req, res) => {
       return res.json({ 
         success: true, 
         result,
-        txHash: result.signature || result.txHash || "pending"
+        txHash: result.tx || "pending"
       });
     } catch (sdkErr) {
       console.error("SDK Error:", sdkErr);
@@ -497,18 +546,22 @@ app.post("/withdraw/sol", authMiddleware, async (req, res) => {
 /**
  * GET /balance (PROTECTED - requires JWT)
  * 
- * Check ShadowPay privacy pool balance
- * Shows how much is available in the pool (not managed by us, just reported)
+ * Check Privacy Cash pool balance
+ * Shows SOL balance available in the pool (not managed by us, just reported)
  * 
  * Returns: { balance }
  */
 app.get("/balance", authMiddleware, async (req, res) => {
   try {
-    const c = initClient();
-    const balance = await c.getBalance?.() || 0;
-    return res.json({ success: true, balance });
+    if (!process.env.PRIVACY_CASH_ENABLED || process.env.PRIVACY_CASH_ENABLED === "false") {
+      // Demo mode
+      return res.json({ success: true, balance: 1000000, token: "SOL" });
+    }
+
+    const balance = await privacyCashService.getPrivateBalance();
+    return res.json({ success: true, balance, token: "SOL" });
   } catch (err) {
-    console.error(err);
+    console.error("Balance check error:", err);
     return res.status(500).json({ error: String(err), balance: 0 });
   }
 });
