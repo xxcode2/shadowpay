@@ -8,6 +8,19 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { verifySignature, generateToken, authMiddleware } from "./auth.js";
 import * as privacyCashService from "./privacyCashService.js";
+import {
+  getCorsOptions,
+  getHelmetOptions,
+  globalLimiter,
+  authLimiter,
+  paymentLimiter,
+  withdrawalLimiter,
+  sanitizeInput,
+  securityLogger,
+  validateJwtSecret,
+  validatePrivateKey,
+  auditLogger
+} from "./security.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -67,8 +80,33 @@ function initClient() {
 }
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECURITY MIDDLEWARE (MUST BE FIRST)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Validate environment variables before starting
+validateJwtSecret();
+validatePrivateKey();
+
+// Security headers
+const helmet = (await import('helmet')).default;
+app.use(getHelmetOptions());
+
+// CORS with strict configuration
+app.use(cors(getCorsOptions()));
+
+// Global rate limiting
+app.use(globalLimiter);
+
+// Security logging
+app.use(securityLogger);
+
+// Body parsing
+app.use(express.json({ limit: '1mb' })); // Prevent large payloads
+
+// Input sanitization
+app.use(sanitizeInput);
 
 const LINKS_FILE = path.resolve(__dirname, "links.json");
 
@@ -113,27 +151,46 @@ app.get("/health", (req, res) => res.json({ ok: true }));
  * 
  * Returns JWT for withdrawal operations (owner-only)
  */
-app.post("/auth/login", async (req, res) => {
+app.post("/auth/login", authLimiter, async (req, res) => {
   try {
     const { publicKey, message, signature } = req.body;
     
     if (!publicKey || !message || !signature) {
+      auditLogger.warn('⚠️ Login attempt with missing fields', {
+        hasPublicKey: !!publicKey,
+        hasMessage: !!message,
+        hasSignature: !!signature,
+        ip: req.ip,
+        timestamp: new Date()
+      });
       return res.status(400).json({ error: "Missing publicKey, message, or signature" });
     }
 
     // Verify the signature was signed by the public key (TweetNaCl)
     const isValid = verifySignature(message, signature, publicKey);
     if (!isValid) {
+      auditLogger.warn('❌ Failed authentication attempt', {
+        publicKey,
+        ip: req.ip,
+        reason: 'Invalid signature',
+        timestamp: new Date()
+      });
       return res.status(401).json({ error: "Invalid signature" });
     }
 
     // Generate JWT token (24h expiry)
     const token = generateToken(publicKey, { address: publicKey });
     
+    auditLogger.info('✅ Successful authentication', {
+      publicKey,
+      ip: req.ip,
+      timestamp: new Date()
+    });
+
     return res.json({ success: true, token, publicKey });
   } catch (err) {
-    console.error("Auth error:", err);
-    return res.status(500).json({ error: String(err) });
+    auditLogger.error('❌ Auth error', { error: err.message, ip: req.ip });
+    return res.status(500).json({ error: "Authentication failed" });
   }
 });
 
@@ -232,7 +289,7 @@ app.get("/links/:id", async (req, res) => {
  * Body: { amount, token, referrer }
  * Returns: { link: { ...metadata with commitment } }
  */
-app.post("/links/:id/pay", async (req, res) => {
+app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
   try {
     const { amount, token, referrer } = req.body;
     const map = await loadLinks();
@@ -336,7 +393,7 @@ app.post("/links/:id/pay", async (req, res) => {
  * Body: { recipientWallet }
  * Returns: { link: { ...metadata with withdrawnAt } }
  */
-app.post("/links/:id/claim", authMiddleware, async (req, res) => {
+app.post("/links/:id/claim", withdrawalLimiter, authMiddleware, async (req, res) => {
   try {
     const { recipientWallet } = req.body;
     const map = await loadLinks();
@@ -462,7 +519,7 @@ app.post("/links/:id/claim", authMiddleware, async (req, res) => {
  * Body: { mint, amount, recipient }
  * Returns: { txHash, result }
  */
-app.post("/withdraw/spl", authMiddleware, async (req, res) => {
+app.post("/withdraw/spl", withdrawalLimiter, authMiddleware, async (req, res) => {
   try {
     const { mint, amount, recipient } = req.body;
     
@@ -508,7 +565,7 @@ app.post("/withdraw/spl", authMiddleware, async (req, res) => {
  * Body: { lamports, recipient }
  * Returns: { txHash, result }
  */
-app.post("/withdraw/sol", authMiddleware, async (req, res) => {
+app.post("/withdraw/sol", withdrawalLimiter, authMiddleware, async (req, res) => {
   try {
     const { lamports, recipient } = req.body;
     

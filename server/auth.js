@@ -5,7 +5,26 @@ import bs58 from "bs58";
 
 const { decodeUTF8, encodeUTF8, encodeBase64, decodeBase64 } = util;
 
-const JWT_SECRET = process.env.JWT_SECRET || "shadowpay-dev-secret-key-change-in-production";
+// CRITICAL: Enforce JWT_SECRET is set
+let JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error(
+    '❌ CRITICAL: JWT_SECRET environment variable not set!\n' +
+    '   Generate a secure secret with: openssl rand -hex 32\n' +
+    '   Add to .env: JWT_SECRET=<output>\n'
+  );
+  process.exit(1);
+}
+
+if (JWT_SECRET === 'shadowpay-dev-secret-key-change-in-production') {
+  console.error(
+    '❌ CRITICAL: Must set unique JWT_SECRET for production!\n' +
+    '   Current secret is the default development secret.\n' +
+    '   Generate new secret: openssl rand -hex 32\n'
+  );
+  process.exit(1);
+}
 
 /**
  * Sign a message with a Solana private key
