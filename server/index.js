@@ -21,6 +21,14 @@ import {
   validatePrivateKey,
   auditLogger
 } from "./security.js";
+import {
+  loadLinksFromSupabase,
+  saveLinksToSupabase,
+  saveLinkToSupabase,
+  getUserLinksFromSupabase,
+  getUserBalanceFromSupabase,
+  initSupabase
+} from "./supabase.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -92,6 +100,9 @@ const app = express();
 // Trust proxy for Railway and other reverse proxies
 app.set('trust proxy', 1);
 
+// Initialize Supabase for persistent storage
+initSupabase();
+
 // Validate environment variables before starting
 validateJwtSecret();
 validatePrivateKey();
@@ -118,25 +129,50 @@ app.use(sanitizeInput);
 const LINKS_FILE = path.resolve(__dirname, "links.json");
 
 /**
- * Load all link metadata from persistent storage
+ * Load all link metadata from Supabase (persistent) or fallback to file
  * This is NOT fund storage — funds are in ShadowPay privacy pool
  */
 async function loadLinks() {
   try {
-    const data = await fs.readFile(LINKS_FILE, "utf-8");
-    return JSON.parse(data || "{}");
-  } catch (e) {
+    // Try Supabase first (persistent storage)
+    const supabaseLinks = await loadLinksFromSupabase();
+    if (Object.keys(supabaseLinks).length > 0) {
+      return supabaseLinks;
+    }
+    
+    // Fallback to file system for backward compatibility
+    try {
+      const data = await fs.readFile(LINKS_FILE, "utf-8");
+      return JSON.parse(data || "{}");
+    } catch (e) {
+      return {};
+    }
+  } catch (err) {
+    console.error("Error loading links:", err);
     return {};
   }
 }
 
 /**
- * Save link metadata to persistent storage
+ * Save link metadata to Supabase (persistent) and fallback to file
  * This persists: link ID, commitment (proof of deposit), status, amount
  * Funds themselves are NOT stored here — they're in ShadowPay privacy pool
  */
 async function saveLinks(m) {
-  await fs.writeFile(LINKS_FILE, JSON.stringify(m, null, 2), "utf-8");
+  try {
+    // Save to Supabase (persistent)
+    await saveLinksToSupabase(m);
+    // Also save to file for backup
+    await fs.writeFile(LINKS_FILE, JSON.stringify(m, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving links:", err);
+    // Try file-only as fallback
+    try {
+      await fs.writeFile(LINKS_FILE, JSON.stringify(m, null, 2), "utf-8");
+    } catch (fileErr) {
+      console.error("Failed to save links even to file:", fileErr);
+    }
+  }
 }
 
 app.get("/health", (req, res) => res.json({ ok: true }));
