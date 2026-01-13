@@ -33,53 +33,51 @@ const CreateLink = () => {
         toast.error('Invalid Amount', {
           description: 'Please enter a valid amount greater than 0',
         });
-        setLoadingCreate(false);
         return;
       }
     }
 
     setLoadingCreate(true);
     try {
-      // Try server first
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || '';
-        const endpoint = apiUrl ? `${apiUrl}/links` : '/api/links';
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: amountType === "fixed" ? amount : null,
-            token,
-            anyAmount: amountType === "any",
-            linkUsageType,
-          }),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          setGeneratedLink(json.link.url);
-          setLinkCreated(true);
-          return;
-        }
-      } catch (e) {
-        // fallback to local stub
+      // Call backend to create link
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const endpoint = apiUrl ? `${apiUrl}/links` : '/links';
+      
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: amountType === "fixed" ? amount : null,
+          token,
+          anyAmount: amountType === "any",
+          linkUsageType,
+          amountType,
+          creator_id: publicKey || "unknown",
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create link');
       }
 
-      const link = await createPrivateLink({
-        amount: amountType === "fixed" ? amount : undefined,
-        token,
-        amountType,
-        linkUsageType,
-        creator_id: publicKey || "", // fallback to empty string if not connected
-      });
+      const json = await res.json();
       
-      // Expiry handled by backend
-      
-      setGeneratedLink(link.url);
+      if (!json.link || !json.link.url) {
+        throw new Error('Invalid response from server');
+      }
+
+      setGeneratedLink(json.link.url);
       setLinkCreated(true);
       
       // Show success toast
       toast.success('Link Created!', {
         description: 'Your payment link is ready to share',
+      });
+    } catch (error) {
+      console.error('Error creating link:', error);
+      toast.error('Failed to Create Link', {
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
       });
     } finally {
       setLoadingCreate(false);

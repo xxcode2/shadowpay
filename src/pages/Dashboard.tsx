@@ -34,11 +34,13 @@ import { Link } from "react-router-dom";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { fetchDashboardData } from "@/lib/api";
+import { useWallet } from "@/hooks/use-wallet";
 import type { PaymentLink } from "@/lib/types";
 
 type FilterStatus = 'all' | 'active' | 'paid' | 'expired';
 
 const Dashboard = () => {
+  const { publicKey } = useWallet();
   const [showBalance, setShowBalance] = useState(true);
   const [privateBalance, setPrivateBalance] = useState<number>(0);
   const [balanceLoading, setBalanceLoading] = useState(true);
@@ -57,8 +59,8 @@ const Dashboard = () => {
       try {
         setBalanceLoading(true);
         setLinksLoading(true);
-        console.log('Fetching dashboard data...');
-        const { balance, links } = await fetchDashboardData();
+        console.log('Fetching dashboard data for user:', publicKey);
+        const { balance, links } = await fetchDashboardData(publicKey || undefined);
         console.log('Fetched data:', { balance, linksCount: links.length });
         setPrivateBalance(balance);
         setLinks(links);
@@ -72,12 +74,12 @@ const Dashboard = () => {
       }
     }
     loadDashboard();
-  }, []);
+  }, [publicKey]);
 
   const handleRefreshBalance = async () => {
     setRefreshing(true);
     try {
-      const { balance, links } = await fetchDashboardData();
+      const { balance, links } = await fetchDashboardData(publicKey || undefined);
       setPrivateBalance(balance);
       setLinks(links);
       toast.success('Balance Updated', {

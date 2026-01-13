@@ -222,7 +222,7 @@ app.post("/auth/verify", authMiddleware, (req, res) => {
  */
 app.post("/links", async (req, res) => {
   try {
-    const { amount, token, anyAmount } = req.body;
+    const { amount, token, anyAmount, creator_id, linkUsageType, amountType } = req.body;
     const map = await loadLinks();
     const id = Math.random().toString(36).slice(2, 9);
     const url = `${process.env.FRONTEND_ORIGIN || "http://localhost:5173"}/pay/${id}`;
@@ -234,9 +234,15 @@ app.post("/links", async (req, res) => {
       amount, 
       token: token || "USDC", 
       anyAmount: !!anyAmount, 
+      amountType: amountType || "fixed",
+      linkUsageType: linkUsageType || "reusable",
+      creator_id: creator_id || "unknown",
       status: "created",
       commitment: null,
-      paid: false 
+      paid: false,
+      payment_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
     map[id] = link;
     await saveLinks(map);
@@ -597,6 +603,79 @@ app.post("/withdraw/sol", withdrawalLimiter, authMiddleware, async (req, res) =>
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: String(err) });
+  }
+});
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * DASHBOARD / USER DATA ENDPOINTS
+ * ═══════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * GET /api/payment-links
+ * 
+ * Get all payment links created by the authenticated user
+ * Requires JWT token in Authorization header or user_id in query
+ * 
+ * Returns: { links: [...] }
+ */
+app.get("/api/payment-links", async (req, res) => {
+  try {
+    // Try to get user_id from JWT (if auth provided)
+    let userId = req.user?.address || req.query.user_id || "";
+    
+    if (!userId) {
+      return res.status(400).json({ error: "user_id required", links: [] });
+    }
+
+    const map = await loadLinks();
+    
+    // Filter links by creator_id
+    const userLinks = Object.values(map).filter((link) => {
+      return link.creator_id === userId;
+    });
+
+    return res.json({ success: true, links: userLinks });
+  } catch (err) {
+    console.error("Error fetching payment links:", err);
+    return res.status(500).json({ error: String(err), links: [] });
+  }
+});
+
+/**
+ * GET /api/balance
+ * 
+ * Get user's private balance (total received via payment links)
+ * Queries total amount from all payments received by this user
+ * 
+ * Returns: { balance }
+ */
+app.get("/api/balance", async (req, res) => {
+  try {
+    // Try to get user_id from JWT (if auth provided) or query param
+    let userId = req.user?.address || req.query.user_id || "";
+    
+    if (!userId) {
+      return res.status(400).json({ error: "user_id required", balance: 0 });
+    }
+
+    const map = await loadLinks();
+    
+    // Calculate total received by this user
+    // Sum up all amounts from links where this user is the creator AND status is "paid"
+    let totalBalance = 0;
+    Object.values(map).forEach((link) => {
+      if (link.creator_id === userId && link.paid) {
+        const amount = parseFloat(link.amount) || 0;
+        totalBalance += amount;
+      }
+    });
+
+    return res.json({ success: true, balance: totalBalance });
+  } catch (err) {
+    console.error("Error fetching balance:", err);
+    return res.status(500).json({ error: String(err), balance: 0 });
   }
 });
 

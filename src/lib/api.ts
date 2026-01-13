@@ -18,10 +18,21 @@ export async function withdrawFromBackend(opts: { user_id: string; amount: numbe
 }
 
 // Add the missing fetchDashboardData function with better error handling
-export async function fetchDashboardData(): Promise<{ balance: number; links: any[] }> {
+export async function fetchDashboardData(userId?: string): Promise<{ balance: number; links: any[] }> {
   try {
+    // Use provided userId or empty string (for cases where not connected)
+    const userIdForFetch = userId || '';
+    
+    if (!userIdForFetch) {
+      console.warn('No user_id available - returning empty data');
+      return {
+        balance: 0,
+        links: []
+      };
+    }
+
     // Try to fetch balance first
-    const balanceRes = await fetch('/api/balance');
+    const balanceRes = await fetch(`/api/balance?user_id=${encodeURIComponent(userIdForFetch)}`);
     if (!balanceRes.ok) {
       console.error('Balance API error:', await balanceRes.text());
       throw new Error("Failed to fetch balance");
@@ -29,7 +40,7 @@ export async function fetchDashboardData(): Promise<{ balance: number; links: an
     const balanceData = await balanceRes.json();
     
     // Try to fetch payment links
-    const linksRes = await fetch('/api/payment-links');
+    const linksRes = await fetch(`/api/payment-links?user_id=${encodeURIComponent(userIdForFetch)}`);
     if (!linksRes.ok) {
       console.error('Payment links API error:', await linksRes.text());
       throw new Error("Failed to fetch payment links");
@@ -38,7 +49,7 @@ export async function fetchDashboardData(): Promise<{ balance: number; links: an
     
     return {
       balance: balanceData.balance || 0,
-      links: Array.isArray(linksData.links) ? linksData.links : []
+      links: Array.isArray(linksData.links) ? linksData.links : (Array.isArray(linksData) ? linksData : [])
     };
   } catch (error) {
     console.error('Error in fetchDashboardData:', error);
