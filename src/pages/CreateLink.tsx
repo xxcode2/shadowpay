@@ -40,7 +40,10 @@ const CreateLink = () => {
     setLoadingCreate(true);
     try {
       // Call backend to create link
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+      const apiUrl = import.meta.env.VITE_API_URL;
+      if (!apiUrl) {
+        throw new Error('API_URL not configured. Please set VITE_API_URL environment variable.');
+      }
       const endpoint = `${apiUrl}/links`;
       
       const res = await fetch(endpoint, {

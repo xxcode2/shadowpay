@@ -89,6 +89,9 @@ const app = express();
 // SECURITY MIDDLEWARE (MUST BE FIRST)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Trust proxy for Railway and other reverse proxies
+app.set('trust proxy', 1);
+
 // Validate environment variables before starting
 validateJwtSecret();
 validatePrivateKey();
