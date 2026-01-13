@@ -308,19 +308,20 @@ export function validatePrivateKey() {
 
   if (!privateKey) {
     console.warn(
-      '⚠️ WARNING: PRIVATE_KEY not set. Privacy Cash operations will fail.\n' +
-      '   For demo mode, set: PRIVACY_CASH_ENABLED=false\n' +
-      '   For production, add PRIVATE_KEY to .env\n'
+      '⚠️ INFO: PRIVATE_KEY not set. Demo mode enabled.\n' +
+      '   - User payments: ✅ Working (users sign their own transactions)\n' +
+      '   - Owner withdrawals: ❌ Disabled (requires PRIVATE_KEY)\n' +
+      '   To enable owner withdrawals, add PRIVATE_KEY to .env\n'
     );
     return;
   }
 
   if (privateKey === '<your-private-key-base58>' || privateKey.includes('your-')) {
-    console.error(
-      '❌ CRITICAL: PRIVATE_KEY contains placeholder value!\n' +
-      '   Replace with actual keypair in .env file.\n'
+    console.warn(
+      '⚠️ INFO: PRIVATE_KEY contains placeholder. Demo mode enabled.\n' +
+      '   To enable owner withdrawals, replace with actual keypair in .env\n'
     );
-    process.exit(1);
+    return;
   }
 
   if (privateKey.length < 20) {

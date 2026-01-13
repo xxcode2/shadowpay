@@ -68,13 +68,17 @@ let client = null;
  * 
  * IMPORTANT: The 'owner' field is used for demo withdrawals only.
  * Production deployments should use an on-chain Program/Protocol instead.
+ * 
+ * DEMO MODE: If PRIVATE_KEY is not set, owner operations will be disabled
+ * but user payments will still work (users sign their own transactions).
  */
 function initClient() {
-  if (!RPC || !OWNER) {
-    throw new Error("RPC_URL or PRIVATE_KEY not set");
+  if (!RPC) {
+    throw new Error("RPC_URL not set");
   }
   if (!client) {
-    client = new PrivacyCash({ RPC_url: RPC, owner: OWNER });
+    // Owner is optional - enables demo mode when not provided
+    client = new PrivacyCash({ RPC_url: RPC, owner: OWNER || undefined });
   }
   return client;
 }
