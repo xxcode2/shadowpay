@@ -793,6 +793,58 @@ app.get("/balance", authMiddleware, async (req, res) => {
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
+ * PAYMENT CONFIRMATION ENDPOINT
+ * ═══════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * POST /payments/confirm
+ * 
+ * Confirm payment metadata (for sync after on-chain transaction)
+ * Frontend calls this after confirming on-chain transaction
+ */
+app.post(\"/payments/confirm\", paymentLimiter, async (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'application/json');
+    const { linkId, txHash, amount, token } = req.body;
+    
+    if (!linkId) {
+      return res.status(400).json({ error: \"linkId required\" });
+    }
+
+    const map = await loadLinks();
+    const link = map[linkId];
+    
+    if (!link) {
+      return res.status(404).json({ error: \"Link not found\" });
+    }
+
+    // Update link with transaction hash
+    if (txHash) {
+      link.txHash = txHash;
+    }
+    if (!link.paid && amount) {
+      link.paid = true;
+      link.status = \"paid\";
+      link.paidAt = Date.now();
+      link.payment_count = (link.payment_count || 0) + 1;
+    }
+    
+    map[linkId] = link;
+    await saveLinks(map);
+    
+    console.log(`[/payments/confirm] Payment confirmed for link ${linkId}`);
+
+    return res.json({ success: true, link });
+  } catch (err) {
+    console.error(\"[/payments/confirm] Error:\", err);
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
  * SERVER STARTUP
  * ═══════════════════════════════════════════════════════════════════════════════
  */
