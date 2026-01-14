@@ -231,10 +231,10 @@ const PayLink = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            link_id: linkId,
-            tx_hash: signature,
+            id: linkId,
+            txHash: signature,
             amount: paymentData.amount,
-            payer_wallet: publicKey,
+            token: paymentData.token || 'SOL',
           }),
         });
         if (!confirmRes.ok) {

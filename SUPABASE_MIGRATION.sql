@@ -1,5 +1,8 @@
+-- Drop old table if exists (to start fresh)
+DROP TABLE IF EXISTS public.payment_links CASCADE;
+
 -- Create payment_links table for persistent storage
-CREATE TABLE IF NOT EXISTS public.payment_links (
+CREATE TABLE public.payment_links (
   id TEXT PRIMARY KEY,
   creator_id TEXT NOT NULL,
   amount TEXT,
@@ -18,9 +21,9 @@ CREATE TABLE IF NOT EXISTS public.payment_links (
   payment_count INTEGER DEFAULT 0
 );
 
--- Create index for faster queries
-CREATE INDEX IF NOT EXISTS idx_payment_links_creator_id ON public.payment_links(creator_id);
-CREATE INDEX IF NOT EXISTS idx_payment_links_paid ON public.payment_links(paid);
+-- Create indexes for faster queries
+CREATE INDEX idx_payment_links_creator_id ON public.payment_links(creator_id);
+CREATE INDEX idx_payment_links_paid ON public.payment_links(paid);
 
 -- Enable Row Level Security
 ALTER TABLE public.payment_links ENABLE ROW LEVEL SECURITY;
