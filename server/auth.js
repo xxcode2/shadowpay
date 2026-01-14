@@ -5,25 +5,13 @@ import bs58 from "bs58";
 
 const { decodeUTF8, encodeUTF8, encodeBase64, decodeBase64 } = util;
 
-// CRITICAL: Enforce JWT_SECRET is set
-let JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-  console.error(
-    '❌ CRITICAL: JWT_SECRET environment variable not set!\n' +
-    '   Generate a secure secret with: openssl rand -hex 32\n' +
-    '   Add to .env: JWT_SECRET=<output>\n'
-  );
-  process.exit(1);
-}
-
-if (JWT_SECRET === 'shadowpay-dev-secret-key-change-in-production') {
-  console.error(
-    '❌ CRITICAL: Must set unique JWT_SECRET for production!\n' +
-    '   Current secret is the default development secret.\n' +
-    '   Generate new secret: openssl rand -hex 32\n'
-  );
-  process.exit(1);
+// JWT_SECRET will be loaded after dotenv.config() in index.js
+// Validation happens in security.js validateJwtSecret()
+function getJwtSecret() {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET not configured');
+  }
+  return process.env.JWT_SECRET;
 }
 
 /**
@@ -62,7 +50,7 @@ export function verifySignature(message, signature, publicKeyBase58) {
 export function generateToken(publicKey, wallet) {
   return jwt.sign(
     { publicKey, wallet, iat: Date.now() },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: "24h" }
   );
 }
@@ -72,7 +60,7 @@ export function generateToken(publicKey, wallet) {
  */
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, getJwtSecret());
   } catch (err) {
     return null;
   }

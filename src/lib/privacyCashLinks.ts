@@ -205,7 +205,7 @@ export async function payViaLink(
     // 2. Get commitment from ShadowPay protocol
     // 3. Return commitment
     // We then store commitment locally as proof
-    const res = await fetch(`${apiUrl}/api/links/${linkId}/pay`, {
+    const res = await fetch(`${apiUrl}/links/${linkId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount, token }),
@@ -305,7 +305,7 @@ export async function claimLink(
     // 1. Use the commitment to identify the pool deposit
     // 2. Call PrivacyCash.withdraw() or PrivaCash.withdrawSPL()
     // 3. Funds transfer directly from pool to recipientWallet
-    const res = await authFetch(`${apiUrl}/api/links/${linkId}/claim`, {
+    const res = await authFetch(`${apiUrl}/links/${linkId}/claim`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recipientWallet }),

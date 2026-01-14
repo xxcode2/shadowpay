@@ -1,3 +1,22 @@
+/**
+ * ⚠️ DEPRECATED - DO NOT USE THESE FUNCTIONS
+ * 
+ * These functions bypass the backend and directly access Supabase.
+ * This violates the architecture rules:
+ * - Frontend should NEVER directly write to Supabase
+ * - All data mutations must go through backend API
+ * - Balance calculations must ONLY come from Privacy Cash SDK
+ * 
+ * Use the backend API endpoints instead:
+ * - POST /links - create link
+ * - GET /links/:id - get link details
+ * - POST /links/:id/pay - deposit payment
+ * - POST /links/:id/claim - withdraw payment
+ * - GET /api/balance - get balance
+ * 
+ * This file is kept for reference only.
+ */
+
 import { supabase } from './supabaseClient';
 
 // Create Payment Link

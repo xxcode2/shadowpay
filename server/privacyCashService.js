@@ -283,8 +283,8 @@ export async function getPrivateBalanceSPL({ mintAddress }) {
 }
 
 /**
- * Check if Privacy Cash client is running
+ * Check if Privacy Cash client is initialized
  */
-export function isClientRunning() {
-  return privacyCashClient && !privacyCashClient.isRuning;
+export function isClientInitialized() {
+  return privacyCashClient !== null;
 }

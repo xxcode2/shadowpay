@@ -1,8 +1,14 @@
-// Pay a link (stub, to be implemented)
 import { supabase } from './supabaseClient';
 import { PaymentLink, AmountType, LinkUsageType, Token } from './types';
 
-// Full Supabase sync logic for on-chain payment
+/**
+ * ⚠️ DEPRECATED - DO NOT USE
+ * 
+ * This function directly writes to Supabase which violates architecture rules.
+ * Use the backend API endpoint instead: POST /links/:id/pay
+ * 
+ * Kept for backwards compatibility only.
+ */
 export async function payLink(linkId: string, payer_wallet: string, amount: number, tx_hash?: string): Promise<{ success: boolean }> {
   // STEP 1: Validate & fetch payment link
   if (!linkId || !payer_wallet || !amount) {
@@ -89,65 +95,12 @@ export async function payLink(linkId: string, payer_wallet: string, amount: numb
 
     console.log(`✅ Link updated: payment_count=${newPaymentCount}, status=${updateFields.status || link.status}`);
 
-    // STEP 4: Update or create balance for link creator
-    // First, try to fetch existing balance
-    const { data: balData, error: balFetchError } = await supabase
-      .from('balances')
-      .select('id, balance')
-      .eq('user_id', link.creator_id)
-      .single();
+    // STEP 4: Balance update REMOVED
+    // Balance is NOT stored in database
+    // Balance is ONLY fetched from Privacy Cash SDK via backend /api/balance endpoint
+    // This prevents fake balance increments and ensures single source of truth
 
-    let balanceUpdateError = null;
-
-    if (balFetchError && balFetchError.code !== 'PGRST116') {
-      // PGRST116 = "not found" (expected if no balance row yet)
-      console.error("Error fetching balance:", balFetchError);
-      throw new Error(`Failed to fetch balance: ${balFetchError.message}`);
-    }
-
-    // Determine new balance
-    const newBalance = balData 
-      ? Number(balData.balance) + Number(amount)
-      : Number(amount);
-
-    if (balData) {
-      // Update existing balance row
-      const { error: updBalError } = await supabase
-        .from('balances')
-        .update({ 
-          balance: newBalance,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', link.creator_id);
-
-      if (updBalError) {
-        console.error("Error updating balance:", updBalError);
-        balanceUpdateError = updBalError;
-      }
-    } else {
-      // Create new balance row
-      const { error: insBalError } = await supabase
-        .from('balances')
-        .insert([{
-          user_id: link.creator_id,
-          balance: newBalance,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }]);
-
-      if (insBalError) {
-        console.error("Error creating balance:", insBalError);
-        balanceUpdateError = insBalError;
-      }
-    }
-
-    if (balanceUpdateError) {
-      throw new Error(`Failed to update balance: ${balanceUpdateError.message}`);
-    }
-
-    console.log(`✅ Balance updated for ${link.creator_id}: ${newBalance}`);
-
-    // STEP 6: Return success
+    // STEP 5: Return success
     console.log(`✅ Payment synced successfully for link ${linkId}`);
     return { success: true };
 
@@ -157,43 +110,89 @@ export async function payLink(linkId: string, payer_wallet: string, amount: numb
     throw err;
   }
 }
-import { createPaymentLink, getAllPaymentLinks } from './supabasePayment';
-// ...existing code...
 
+/**
+ * Create a private receive link via backend API
+ * 
+ * CRITICAL: This calls the backend to create the link
+ * Frontend does NOT directly insert to Supabase
+ */
 export async function createPrivateLink(opts: {
   amount?: string;
   token?: string;
   amountType?: AmountType;
   linkUsageType?: LinkUsageType;
-  expiresIn?: number; // milliseconds, optional
+  expiresIn?: number;
   creator_id: string;
 }): Promise<PaymentLink> {
-  const linkId = Math.random().toString(36).slice(2, 9);
-  const url = `${window.location.origin}/pay/${linkId}`;
-  await createPaymentLink({
-    creator_id: opts.creator_id,
-    link_id: linkId,
-    amount: opts.amount,
-    token: (opts.token || 'SOL') as Token,
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  
+  const res = await fetch(`${apiUrl}/links`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amount: opts.amount,
+      token: opts.token || 'SOL',
+      creator_id: opts.creator_id
+    })
   });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || 'Failed to create link');
+  }
+
+  const data = await res.json();
+  const link = data.link;
+
   return {
-    linkId,
-    url,
+    linkId: link.id,
+    url: data.url,
     amountType: opts.amountType || 'fixed',
     linkUsageType: opts.linkUsageType || 'one-time',
     amount: opts.amount,
     token: (opts.token || 'SOL') as Token,
-    status: 'active',
-    createdAt: Date.now(),
-    paymentCount: 0,
+    status: link.status,
+    createdAt: link.created_at,
+    paymentCount: link.payment_count || 0,
     expiresAt: opts.expiresIn ? Date.now() + opts.expiresIn : undefined
   };
 }
 
+/**
+ * Get link details from backend API
+ * 
+ * CRITICAL: Fetches link metadata from backend
+ * Frontend does NOT directly query Supabase
+ */
 export async function getLinkDetails(linkId?: string | null): Promise<PaymentLink | null> {
   if (!linkId) return null;
-  const links = await getAllPaymentLinks();
-  return links.find((l: any) => l.linkId === linkId) || null;
-}
+  
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  
+  try {
+    const res = await fetch(`${apiUrl}/links/${linkId}`);
+    
+    if (!res.ok) {
+      return null;
+    }
 
-// ...existing code...
+    const data = await res.json();
+    const link = data.link;
+
+    return {
+      linkId: link.id,
+      url: `${window.location.origin}/pay/${link.id}`,
+      amountType: 'fixed',
+      linkUsageType: 'one-time',
+      amount: link.amount?.toString(),
+      token: (link.token || 'SOL') as Token,
+      status: link.status,
+      createdAt: link.created_at,
+      paymentCount: link.payment_count || 0
+    };
+  } catch (err) {
+    console.error('Failed to fetch link details:', err);
+    return null;
+  }
+}

@@ -1,3 +1,8 @@
+// ⚠️ DEPRECATED - DO NOT USE
+// This file is an old example/demo and is NOT used by the production system
+// The real backend is in /server/index.js
+// This file contains fake balance increment logic and should be ignored
+
 // Contoh Backend API (Node.js/Express) untuk ShadowPay
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
