@@ -135,10 +135,15 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
     // 2. Generate cryptographic commitment
     // 3. Store commitment in on-chain Merkle tree
     // Runtime verification needed: inspect tx on Solscan
+    console.log("⏳ [RELAYER] deposit start");
+    const start = Date.now();
+
     const result = await privacyCashClient.deposit({
       lamports,
       referrer: referrer || undefined
     });
+
+    console.log("✅ [RELAYER] deposit done in", Date.now() - start, "ms");
 
     if (!result || !result.tx) {
       throw new Error("Deposit failed: no transaction signature");
@@ -155,7 +160,7 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
       lamports
     });
   } catch (err) {
-    console.error("❌ Deposit error:", err);
+    console.error("❌ [RELAYER] deposit failed:", err);
     res.status(500).json({ error: err.message });
   }
 });
