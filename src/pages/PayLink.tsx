@@ -101,72 +101,33 @@ const PayLink = () => {
     setPaymentState("processing");
 
     try {
-      // Get Phantom wallet
-      const phantom = (window as any).phantom?.solana;
-      if (!phantom) {
-        throw new Error("Phantom wallet not found. Please install Phantom extension.");
-      }
-
-      console.log("💳 Initiating privacy-preserving payment...");
+      console.log("💳 Initiating relayer-sponsored payment...");
       console.log("Amount:", paymentData.amount, token);
       console.log("Link ID:", linkId);
       console.log("Wallet:", publicKey);
 
       // Get network from env (mainnet for Privacy Cash)
       const network = 'mainnet-beta'; // Privacy Cash ONLY works on mainnet
-      const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
       console.log(`🌐 Network: ${network}`);
-      console.log(`🔗 RPC: ${rpcUrl}`);
 
-      // Create Solana connection
-      const connection = new Connection(rpcUrl, 'confirmed');
-
-      const sender = new PublicKey(publicKey);
-      const lamports = Math.floor(parseFloat(paymentData.amount) * LAMPORTS_PER_SOL);
-
-      // CRITICAL PRIVACY FIX:
-      // Step 1: Create Privacy Cash deposit transaction
-      // This needs to be signed by USER, not relayer
-      console.log("🔐 Creating Privacy Cash deposit transaction...");
-      
-      // Get latest blockhash
-      const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      
-      // Create transaction (Privacy Cash SDK should provide instruction)
-      // For now, we'll use a placeholder that backend will recognize
-      const transaction = new Transaction({
-        feePayer: sender,
-        recentBlockhash: blockhash,
-      }).add(
-        SystemProgram.transfer({
-          fromPubkey: sender,
-          toPubkey: sender, // Placeholder - Privacy Cash pool address will be set by backend
-          lamports: lamports,
-        })
-      );
-
-      // Step 2: USER SIGNS transaction (CRITICAL for privacy)
-      console.log("✍️  Requesting user signature...");
-      const signed = await phantom.signTransaction(transaction);
-      const serialized = Buffer.from(signed.serialize()).toString('base64');
-      
-      console.log("✅ Transaction signed by user");
-
-      // Step 3: Send SIGNED transaction to backend
-      console.log("📡 Sending signed transaction to backend...");
+      // RELAYER-SPONSORED MODE:
+      // Relayer pays for transaction (Privacy Cash SDK only supports this)
+      // User wallet is metadata only (for UI/tracking)
       
       const apiUrl = import.meta.env.VITE_API_URL;
       if (!apiUrl) throw new Error('API URL not configured');
       const endpoint = `${apiUrl}/links/${linkId}/pay`;
+      
+      console.log("📡 Sending relayer-sponsored payment request...");
+      
       const depositRes = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: paymentData.amount,
           token: paymentData.token || "SOL",
-          payerWallet: publicKey,
-          signedTransaction: serialized, // CRITICAL: User-signed tx
+          payerWallet: publicKey, // Metadata only
           network,
         }),
       });
@@ -177,21 +138,21 @@ const PayLink = () => {
       }
 
       const depositData = await depositRes.json();
-      console.log("✅ Privacy-preserving deposit successful:", {
+      console.log("✅ Relayer-sponsored deposit successful:", {
         txHash: depositData.link?.txHash || depositData.txHash,
         commitment: depositData.link?.commitment || depositData.commitment,
         amount: paymentData.amount,
       });
 
-      // Step 2: Get transaction hash from backend response
+      // Get transaction hash from backend response
       const txHash = depositData.link?.txHash || depositData.txHash;
       const commitment = depositData.link?.commitment || depositData.commitment;
 
       if (!commitment) {
-        console.warn("⚠️  No commitment returned - privacy may be compromised");
+        console.warn("⚠️  No commitment returned");
       }
 
-      // Step 3: Save transaction proof
+      // Save transaction proof
       setTxSignature(txHash);
       const explorer = `https://explorer.solana.com/tx/${txHash}`;
       setExplorerUrl(explorer);

@@ -250,7 +250,7 @@ app.get("/links/:id", async (req, res) => {
 /* ───────────────────── PAY (DEPOSIT) ───────────────────── */
 
 app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
-  const { amount, token, payerWallet, signedTransaction } = req.body;
+  const { amount, token, payerWallet } = req.body;
   const map = await loadLinks();
   const link = map[req.params.id];
 
@@ -267,39 +267,27 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
     return res.status(400).json({ error: "Payer wallet required" });
   }
 
-  if (!signedTransaction) {
-    return res.status(400).json({ 
-      error: "Signed transaction required - user must sign in frontend (privacy-preserving)" 
-    });
-  }
-
   try {
-    // ⚠️  CRITICAL PRIVACY ARCHITECTURE:
-    // 1. User SIGNS transaction in frontend (with their wallet)
-    // 2. Backend receives SIGNED transaction
-    // 3. Backend forwards to relayer
-    // 4. Relayer ONLY submits (does NOT sign, does NOT pay)
-    // 
-    // This ensures:
-    // - User = payer (not relayer)
-    // - Privacy preserved (relayer ≠ payer)
-    // - No wallet custody by backend/relayer
+    // 🔄 RELAYER-SPONSORED MODE:
+    // Relayer pays for transaction (sponsored transaction)
+    // This is the ONLY mode Privacy Cash SDK supports for deposits
+    // payerWallet is metadata only (for tracking/UI)
     
-    console.log(`💳 Processing privacy-preserving deposit...`);
+    console.log(`💳 Processing relayer-sponsored deposit...`);
     console.log(`   Amount: ${amount} SOL`);
-    console.log(`   Payer: ${payerWallet}`);
+    console.log(`   Payer (metadata): ${payerWallet}`);
     console.log(`   Link: ${link.id}`);
 
     const lamports = Math.floor(amount * 1000000000);
     
-    // ✅ CALL RELAYER - Relayer ONLY submits, does NOT sign
+    // ✅ CALL RELAYER - Relayer signs AND pays (sponsored tx)
     const relayerUrl = RELAYER_URL;
     
     if (!relayerUrl) {
       throw new Error("RELAYER_URL not configured - backend cannot process payments");
     }
     
-    console.log(`📡 Forwarding signed tx to relayer: POST ${relayerUrl}/deposit`);
+    console.log(`📡 Sending deposit request to relayer: POST ${relayerUrl}/deposit`);
     
     // Create AbortController for timeout
     const controller = new AbortController();
@@ -318,9 +306,7 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
         },
         body: JSON.stringify({
           lamports,
-          payerWallet,
-          signedTransaction, // CRITICAL: User-signed tx, not relayer
-          linkId: link.id
+          payerWallet // Metadata only - relayer is actual payer
         }),
         signal: controller.signal
       });
