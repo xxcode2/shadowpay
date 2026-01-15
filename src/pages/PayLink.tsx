@@ -202,7 +202,6 @@ const PayLink = () => {
       setPaymentState("confirm");
     }
   };
-  };
 
   return (
     <div className="min-h-screen bg-background">
