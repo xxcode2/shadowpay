@@ -107,13 +107,13 @@ const PayLink = () => {
         throw new Error("Phantom wallet not found. Please install Phantom extension.");
       }
 
-      console.log("💳 MODEL B: Initiating client-signed deposit...");
+      console.log("💳 MODEL B: Client-side deposit (Privacy Cash SDK)...");
       console.log("Amount:", paymentData.amount, token);
       console.log("Link ID:", linkId);
       console.log("Wallet:", publicKey);
 
-      // Get network from env (mainnet for Privacy Cash)
-      const network = 'mainnet-beta'; // Privacy Cash ONLY works on mainnet
+      // Get network (mainnet for Privacy Cash)
+      const network = 'mainnet-beta';
       const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
       console.log(`🌐 Network: ${network}`);
@@ -124,81 +124,62 @@ const PayLink = () => {
       const sender = new PublicKey(publicKey);
       const lamports = Math.floor(parseFloat(paymentData.amount) * LAMPORTS_PER_SOL);
 
-      // 🔒 MODEL B - STEP 1: CLIENT SIGNS DEPOSIT TRANSACTION
-      // WHY: If relayer signs, relayer knows deposit origin (privacy leak)
-      // SAME AS: Tornado Cash (user approves deposit, relayer only for withdraw)
+      // 🔒 MODEL B - CLIENT-SIDE DEPOSIT (Privacy Cash SDK)
+      // 1. Initialize Privacy Cash client in browser
+      // 2. Build deposit transaction with commitment
+      // 3. User signs transaction
+      // 4. Submit directly to RPC (not through relayer)
+      // 5. Send metadata to backend
       
-      console.log("🔐 Step 1: Building Privacy Cash deposit transaction...");
+      console.log("🔐 Step 1: Initializing Privacy Cash client (browser)...");
       
-      // TODO: Build proper Privacy Cash deposit instruction
-      // CURRENT LIMITATION: Privacy Cash SDK doesn't expose instruction builder
-      // REQUIRED:
-      // - Get Privacy Cash pool address
-      // - Build deposit instruction with commitment
-      // - Add to transaction
+      // TODO: Import Privacy Cash WASM/client SDK
+      // Example (pseudo-code based on typical privacy pool SDKs):
+      // import { PrivacyCashClient } from '@privacycash/sdk';
+      // 
+      // const privacyClient = await PrivacyCashClient.initialize({
+      //   rpcUrl,
+      //   wallet: phantom
+      // });
       //
-      // FOR NOW: Placeholder transaction (will fail at relayer)
-      const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      const transaction = new Transaction({
-        feePayer: sender,
-        recentBlockhash: blockhash,
-      }).add(
-        SystemProgram.transfer({
-          fromPubkey: sender,
-          toPubkey: sender, // TODO: Replace with Privacy Cash pool address
-          lamports: lamports,
-        })
+      // const { transaction, commitment, encryptedOutputs } = await privacyClient.buildDeposit({
+      //   amount: lamports
+      // });
+      //
+      // // User signs
+      // const signed = await phantom.signTransaction(transaction);
+      // 
+      // // Submit to RPC directly
+      // const txHash = await connection.sendRawTransaction(signed.serialize());
+      // await connection.confirmTransaction(txHash);
+      
+      console.log("⚠️  Privacy Cash browser SDK not yet imported");
+      console.log("⚠️  Need to add: npm install @privacycash/sdk (or WASM module)");
+      
+      // FOR NOW: Return clear error explaining what's needed
+      throw new Error(
+        "Privacy Cash client SDK not integrated yet.\n\n" +
+        "REQUIRED: Import Privacy Cash browser SDK/WASM\n" +
+        "Expected flow:\n" +
+        "1. PrivacyCashClient.buildDeposit(lamports)\n" +
+        "2. User signs transaction\n" +
+        "3. Submit to RPC directly\n" +
+        "4. Extract commitment + tx hash\n" +
+        "5. Send metadata to backend\n\n" +
+        "Architecture is correct, SDK import pending."
       );
-
-      // 🔒 MODEL B - STEP 2: USER SIGNS TRANSACTION (CRITICAL)
-      console.log("✍️  Step 2: Requesting user signature (MODEL B requirement)...");
-      const signed = await phantom.signTransaction(transaction);
-      const serialized = Buffer.from(signed.serialize()).toString('base64');
       
-      console.log("✅ Transaction signed by CLIENT (not relayer)");
-      console.log("   This preserves deposit privacy ✅");
-
-      // 🔒 MODEL B - STEP 3: Send CLIENT-SIGNED transaction to backend
-      console.log("📡 Step 3: Sending CLIENT-SIGNED transaction to backend...");
-      
-      const apiUrl = import.meta.env.VITE_API_URL;
-      if (!apiUrl) throw new Error('API URL not configured');
-      const endpoint = `${apiUrl}/links/${linkId}/pay`;
-      
-      const depositRes = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: paymentData.amount,
-          token: paymentData.token || "SOL",
-          payerWallet: publicKey,
-          signedTransaction: serialized, // CLIENT-SIGNED (MODEL B)
-          network,
-        }),
-      });
-
-      if (!depositRes.ok) {
-        const errorData = await depositRes.json();
-        
-        // Handle MODEL B not implemented error gracefully
-        if (depositRes.status === 501) {
-          throw new Error(
-            "Privacy mode not yet fully implemented.\n\n" +
-            "Privacy Cash SDK limitation: SDK doesn't expose instruction builder for client-signed deposits.\n\n" +
-            "Current status: Architecture ready, SDK integration pending."
-          );
-        }
-        
-        throw new Error(errorData.error || `Deposit failed: ${depositRes.status}`);
-      }
-
-      const depositData = await depositRes.json();
-      console.log("✅ MODEL B deposit successful:", {
-        txHash: depositData.link?.txHash || depositData.txHash,
-        commitment: depositData.link?.commitment || depositData.commitment,
-        amount: paymentData.amount,
-        mode: "client-signed (non-custodial)"
-      });
+      // Once SDK is imported, code would be:
+      // const apiUrl = import.meta.env.VITE_API_URL;
+      // await fetch(`${apiUrl}/links/${linkId}/pay`, {
+      //   method: "POST",
+      //   body: JSON.stringify({
+      //     tx: txHash,
+      //     commitment: commitment,
+      //     amount: paymentData.amount,
+      //     linkId: linkId
+      //   })
+      // });
 
       // Get transaction hash from backend response
       const txHash = depositData.link?.txHash || depositData.txHash;

@@ -135,74 +135,26 @@ app.get("/health", async (_, res) => {
 });
 
 /* ─────────────────────────────────────
-   DEPOSIT (Privacy-Preserving)
+   DEPOSIT - NOT HANDLED BY RELAYER
 ───────────────────────────────────── */
+// MODEL B: Deposits happen CLIENT-SIDE
+// Client builds, signs, and submits deposit to RPC directly
+// Relayer NEVER touches deposits (privacy requirement)
+//
+// If deposit endpoint is called, it's a mistake
 app.post("/deposit", authenticateRequest, async (req, res) => {
-  try {
-    const { lamports, payerWallet, signedTransaction, referrer, mode } = req.body;
-
-    if (!lamports || lamports <= 0) {
-      return res.status(400).json({ error: "Invalid lamports amount" });
-    }
-
-    if (!payerWallet) {
-      return res.status(400).json({ error: "Payer wallet required" });
-    }
-
-    // 🔒 MODEL B REQUIREMENT: Client MUST sign deposit transaction
-    // Relayer MUST NEVER sign deposits (privacy violation)
-    if (!signedTransaction) {
-      return res.status(400).json({ 
-        error: "MODEL B: Signed transaction required. Client must sign deposit (not relayer)." 
-      });
-    }
-
-    console.log(`💰 Processing Privacy Cash deposit: ${lamports / LAMPORTS_PER_SOL} SOL`);
-    console.log(`👤 Payer: ${payerWallet}`);
-    console.log(`🔒 Mode: MODEL B (client-signed, non-custodial)`);
-    console.log("⏳ [RELAYER] deposit start");
-    const start = Date.now();
-
-    // 🔒 MODEL B - TRUE NON-CUSTODIAL PRIVACY:
-    // 1. CLIENT signed transaction (received from frontend)
-    // 2. RELAYER only broadcasts (does NOT sign, does NOT pay)
-    // 3. Privacy preserved: relayer ≠ payer
-    //
-    // WHY: If relayer signs deposits, relayer knows deposit origin (privacy leak)
-    // SAME MODEL AS: Tornado Cash, Railgun, Aztec
-    
-    // TODO: Implement proper Privacy Cash deposit broadcast
-    // CURRENT SDK LIMITATION:
-    // - PrivacyCash SDK's deposit() method signs with relayer keypair (custodial)
-    // - SDK doesn't expose method to broadcast pre-signed deposit tx
-    //
-    // REQUIRED IMPLEMENTATION:
-    // 1. Deserialize signedTransaction (base64 → Transaction object)
-    // 2. Extract Privacy Cash deposit instruction + commitment
-    // 3. Broadcast via connection.sendRawTransaction()
-    // 4. Wait for confirmation
-    // 5. Return tx hash + commitment to backend
-    //
-    // FOR NOW: Placeholder that will be implemented when SDK supports it
-    console.log("⚠️  MODEL B deposit not yet implemented (Privacy Cash SDK limitation)");
-    
-    return res.status(501).json({
-      error: "MODEL B not yet implemented: Privacy Cash SDK limitation",
-      details: "SDK's deposit() method is custodial. Need instruction builder for client-signed deposits.",
-      architecture: "ready",
-      implementation: "pending SDK support",
-      todo: [
-        "Build Privacy Cash deposit instruction on client",
-        "Client signs transaction with commitment",
-        "Relayer broadcasts pre-signed transaction",
-        "Extract and return commitment to client"
-      ],
-      workaround: "Contact Privacy Cash team for non-custodial deposit API"
-    });
-  } catch (err) {
-    console.error("❌ [RELAYER] deposit failed:", err);
-    res.status(500).json({ error: err.message });
-  }
+  return res.status(403).json({
+    error: "MODEL B: Deposits must be submitted client-side",
+    details: "Relayer NEVER signs deposits (privacy violation)",
+    correctFlow: [
+      "1. Client initializes Privacy Cash SDK in browser",
+      "2. Client builds deposit transaction with commitment",
+      "3. User signs transaction in wallet",
+      "4. Client submits to RPC directly",
+      "5. Client sends metadata (tx + commitment) to backend"
+    ],
+    architecture: "Tornado Cash style (client-side deposits)"
+  });
 });
 
 /* ─────────────────────────────────────
