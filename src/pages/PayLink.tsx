@@ -49,8 +49,7 @@ const PayLink = () => {
     // Only use backend for link state and expiry
     (async () => {
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || '';
-        const endpoint = apiUrl ? `${apiUrl}/links/${id}` : `/api/links/${id}`;
+        const endpoint = `/api/links/${id}`;
         const res = await fetch(endpoint);
         if (res.ok) {
           const json = await res.json();
@@ -130,12 +129,7 @@ const PayLink = () => {
       // Step 1: Call backend to initiate deposit to Privacy Cash
       console.log("🚀 Initiating Privacy Cash deposit via backend...");
       
-      const apiUrl = import.meta.env.VITE_API_URL;
-      if (!apiUrl) {
-        throw new Error('API_URL not configured. Cannot deposit to Privacy Cash pool.');
-      }
-
-      const endpoint = `${apiUrl}/links/${linkId}/pay`;
+      const endpoint = `/api/links/${linkId}/pay`;
       const depositRes = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

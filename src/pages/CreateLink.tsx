@@ -41,12 +41,8 @@ const CreateLink = () => {
 
     setLoadingCreate(true);
     try {
-      // Call backend to create link
-      const apiUrl = import.meta.env.VITE_API_URL;
-      if (!apiUrl) {
-        throw new Error('API_URL not configured. Please set VITE_API_URL environment variable.');
-      }
-      const endpoint = `${apiUrl}/links`;
+      // Use relative URL - Vite proxy handles /api routing
+      const endpoint = '/api/links';
       
       const res = await fetch(endpoint, {
         method: "POST",
