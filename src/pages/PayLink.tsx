@@ -181,33 +181,13 @@ const PayLink = () => {
       //   })
       // });
 
-      // Get transaction hash from backend response
-      const txHash = depositData.link?.txHash || depositData.txHash;
-      const commitment = depositData.link?.commitment || depositData.commitment;
-
-      if (!commitment) {
-        console.warn("⚠️  No commitment returned");
-      }
-
-      // Save transaction proof
-      setTxSignature(txHash);
-      const explorer = `https://explorer.solana.com/tx/${txHash}`;
-      setExplorerUrl(explorer);
-
-      // Step 4: Sync payment metadata to database
-      try {
-        const confirmEndpoint = `${apiUrl}/payments/confirm`;
-        const confirmRes = await fetch(confirmEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: linkId,
-            txHash: txHash,
-            amount: paymentData.amount,
-            token: paymentData.token || 'SOL',
-            payer_wallet: publicKey,
-          }),
-        });
+      // Placeholder: Return error until SDK is imported
+      // These variables would be set after actual SDK integration:
+      // const txHash = result.txHash;
+      // const commitment = result.commitment;
+      
+    } catch (error: any) {
+      console.error("Payment error:", error);
 
         if (!confirmRes.ok) {
           const errData = await confirmRes.json();
