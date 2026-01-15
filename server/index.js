@@ -169,7 +169,7 @@ app.post("/links", async (req, res) => {
     creator_id,
     amount,
     token: token || "SOL",
-    status: "created",
+    status: "active",
     commitment: null,
     payment_count: 0,
     created_at: Date.now(),

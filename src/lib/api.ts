@@ -81,9 +81,17 @@ export async function fetchDashboardData(userId?: string): Promise<{ balance: nu
     const linksData = await linksRes.json();
     console.log('✅ Links fetched:', linksData);
     
+    // Normalize links data: convert 'id' to 'linkId' to match frontend types
+    const normalizedLinks = (Array.isArray(linksData.links) ? linksData.links : (Array.isArray(linksData) ? linksData : []))
+      .map((link: any) => ({
+        ...link,
+        linkId: link.linkId || link.id,  // Support both 'id' and 'linkId' fields
+        url: link.url || `/pay/${link.id || link.linkId}`
+      }));
+    
     return {
       balance: balanceData.balance || 0,
-      links: Array.isArray(linksData.links) ? linksData.links : (Array.isArray(linksData) ? linksData : [])
+      links: normalizedLinks
     };
   } catch (error) {
     console.error('Error in fetchDashboardData:', error);

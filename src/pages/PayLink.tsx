@@ -140,6 +140,7 @@ const PayLink = () => {
         body: JSON.stringify({
           amount: paymentData.amount,
           token: paymentData.token || "SOL",
+          payerWallet: publicKey,
           network,
         }),
       });
