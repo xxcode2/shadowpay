@@ -199,7 +199,6 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
       ],
       workaround: "Contact Privacy Cash team for non-custodial deposit API"
     });
-    });
   } catch (err) {
     console.error("❌ [RELAYER] deposit failed:", err);
     res.status(500).json({ error: err.message });
