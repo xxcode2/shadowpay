@@ -345,7 +345,7 @@ app.post(
 
 /* ───────────────────── DASHBOARD ───────────────────── */
 
-app.get("/api/payment-links", async (req, res) => {
+app.get("/payment-links", async (req, res) => {
   const user = req.query.user_id;
   if (!user) return res.json({ links: [] });
 
@@ -359,7 +359,7 @@ app.get("/api/payment-links", async (req, res) => {
 
 /* ───────────────────── BALANCE ───────────────────── */
 
-app.get("/api/balance", async (req, res) => {
+app.get("/balance", async (req, res) => {
   const userId = req.query.user_id;
   
   if (!userId) {
@@ -387,7 +387,7 @@ app.get("/api/balance", async (req, res) => {
 
 /* ───────────────────── WITHDRAW ───────────────────── */
 
-app.post("/api/withdraw", withdrawalLimiter, authMiddleware, async (req, res) => {
+app.post("/withdraw", withdrawalLimiter, authMiddleware, async (req, res) => {
   const { user_id, amount, token, recipient } = req.body;
 
   if (!recipient || !amount || amount <= 0) {
