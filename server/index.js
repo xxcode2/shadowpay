@@ -171,10 +171,14 @@ app.post("/links", async (req, res) => {
   map[id] = link;
   await saveLinks(map);
 
+  const linkWithUrl = {
+    ...link,
+    url: `${process.env.FRONTEND_ORIGIN}/pay/${id}`
+  };
+
   res.json({
     success: true,
-    link,
-    url: `${process.env.FRONTEND_ORIGIN}/pay/${id}`
+    link: linkWithUrl
   });
 });
 
