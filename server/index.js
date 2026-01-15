@@ -69,14 +69,12 @@ import {
   initSupabase
 } from "./supabase.js";
 
-import {
-  getPrivateBalance
-} from "./privacyCashService.js";
-
 // NOTE: Privacy Cash imports removed
 // All ZK proof generation now handled by relayer service
 // Backend NEVER imports or calls depositSOL/withdrawSOL
 // This prevents OOM crashes in backend process
+// Balance endpoint removed - frontend does not need private balance
+// Withdrawal only via relayer - see /links/:id/claim
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.resolve(__dirname, '.env');
@@ -454,72 +452,6 @@ app.get("/payment-links", async (req, res) => {
   res.json({ success: true, links });
 });
 
-/* ───────────────────── BALANCE ───────────────────── */
-
-app.get("/balance", async (req, res) => {
-  const userId = req.query.user_id;
-  
-  if (!userId) {
-    return res.status(400).json({ error: "user_id required" });
-  }
-
-  try {
-    // CRITICAL: Balance is ONLY from Privacy Cash SDK
-    // Backend does NOT store or calculate balance
-    // This is single source of truth
-    // If Privacy Cash client not initialized, returns 0
-    const balanceData = await getPrivateBalance();
-    
-    res.json({
-      success: true,
-      balance: balanceData ? balanceData.sol : 0,
-      lamports: balanceData ? balanceData.lamports : 0
-    });
-  } catch (err) {
-    console.error("❌ Failed to fetch balance:", err.message);
-    // Return 0 if Privacy Cash client not initialized or failed
-    res.json({ success: true, balance: 0, lamports: 0 });
-  }
-});
-
-/* ───────────────────── WITHDRAW ───────────────────── */
-
-app.post("/withdraw", withdrawalLimiter, authMiddleware, async (req, res) => {
-  const { user_id, amount, token, recipient } = req.body;
-
-  if (!recipient || !amount || amount <= 0) {
-    return res.status(400).json({ error: "recipient and amount required" });
-  }
-
-  try {
-    new PublicKey(recipient);
-  } catch {
-    return res.status(400).json({ error: "Invalid recipient address" });
-  }
-
-  try {
-    const lamports = Math.floor(amount * 1000000000);
-
-    console.log(`💸 Direct withdrawal via embedded relayer: ${amount} SOL → ${recipient}`);
-
-    // Call embedded withdraw function directly
-    const result = await withdrawSOL({
-      recipient,
-      lamports,
-      referrer: undefined
-    });
-
-    if (!result || !result.tx) {
-      throw new Error("No transaction signature returned from embedded relayer");
-    }
-
-    res.json({ success: true, txHash: result.tx });
-  } catch (err) {
-    console.error("Withdrawal failed:", err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 /* ───────────────────── ERROR HANDLER (LAST MIDDLEWARE) ───────────────────── */
 
 // Catch-all error handler MUST be last
@@ -539,14 +471,17 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`);
   
+  // CRITICAL: RELAYER_URL is REQUIRED for all payments
+  // No fallback to localhost - will fail in production
   if (!RELAYER_URL) {
-    console.warn(`⚠️  RELAYER_URL not configured - using fallback: http://localhost:4444`);
-    console.warn(`⚠️  This works for LOCAL TESTING ONLY`);
-    console.warn(`⚠️  For production, set RELAYER_URL to your relayer service URL`);
-  } else {
-    console.log(`🔁 Relayer at: ${RELAYER_URL}`);
+    console.error(`❌ FATAL: RELAYER_URL environment variable is REQUIRED`);
+    console.error(`❌ Set RELAYER_URL to your relayer Railway service URL`);
+    console.error(`❌ Example: https://shadowpay-relayer.up.railway.app`);
+    console.error(`❌ NO LOCALHOST FALLBACK - Payments will fail`);
+    process.exit(1);
   }
   
+  console.log(`🔁 Relayer at: ${RELAYER_URL}`);
   console.log(`⏱️  Relayer timeout: ${RELAYER_TIMEOUT}ms`);
   console.log(`\n✅ ARCHITECTURE VERIFIED:`);
   console.log(`   - LIGHTWEIGHT: No ZK proof generation`);
@@ -554,5 +489,6 @@ app.listen(PORT, () => {
   console.log(`   - NO OOM: All heavy logic isolated in relayer`);
   console.log(`   - METADATA ONLY: Stores links, commitments, tx hashes`);
   console.log(`   - STABLE: No uncontrolled memory usage`);
-  console.log(`   - RESILIENT: Timeout protection on relayer calls\n`);
+  console.log(`   - RESILIENT: Timeout protection on relayer calls`);
+  console.log(`   - REQUIRED: RELAYER_URL properly configured\n`);
 });
