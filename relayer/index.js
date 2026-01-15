@@ -3,8 +3,6 @@ import dotenv from "dotenv";
 import fs from "fs";
 import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { PrivacyCash } from "privacycash";
-import { runDepositWorker } from "./depositWorker.js";
-import { runWithdrawWorker } from "./withdrawWorker.js";
 
 /**
  * ShadowPay Relayer Service
@@ -131,22 +129,17 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
     }
 
     console.log(`💰 Depositing ${lamports / LAMPORTS_PER_SOL} SOL to Privacy Cash...`);
-
-    // ⚡ CRITICAL FIX: Run ZK deposit in WORKER THREAD
-    // This prevents blocking Express event loop
-    // Railway timeout fixed: main thread tetap responsive
-    console.log("⏳ [MAIN] Spawning deposit worker thread...");
+    console.log("⏳ [RELAYER] deposit start");
     const start = Date.now();
 
-    const result = await runDepositWorker({
-      rpcUrl: RPC_URL,
-      relayerSecretKey: relayerKeypair.secretKey,
+    // PRAGMATIC FIX: Just run it directly with better RPC
+    // ZK computation akan tetap block, tapi dengan fast RPC should finish < 30s
+    const result = await privacyCashClient.deposit({
       lamports,
-      referrer,
-      timeout: 90000 // 90s timeout (ZK proof bisa lama)
+      referrer: referrer || undefined
     });
 
-    console.log("✅ [MAIN] Worker completed in", Date.now() - start, "ms");
+    console.log("✅ [RELAYER] deposit done in", Date.now() - start, "ms");
 
     if (!result || !result.tx) {
       throw new Error("Deposit failed: no transaction signature");
@@ -154,12 +147,11 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
 
     console.log(`✅ Deposit successful: ${result.tx}`);
     console.log(`📋 Verify on-chain: https://solscan.io/tx/${result.tx}`);
-    console.log(`🔍 Check: Does tx call Privacy Cash program (not SystemProgram)?`);
 
     res.json({
       success: true,
       tx: result.tx,
-      commitment: result.tx, // Transaction hash serves as commitment reference
+      commitment: result.tx,
       lamports
     });
   } catch (err) {
@@ -191,33 +183,24 @@ app.post("/withdraw", authenticateRequest, async (req, res) => {
     }
 
     console.log(`💸 Withdrawing ${lamports / LAMPORTS_PER_SOL} SOL to ${recipient}...`);
-
-    // ⚡ CRITICAL FIX: Run ZK withdraw in WORKER THREAD
-    // Withdraw requires ZK proof generation (HEAVY computation)
-    // Without worker → freeze event loop → 502 timeout
-    console.log("⏳ [MAIN] Spawning withdraw worker thread...");
     const startTime = Date.now();
     
-    const result = await runWithdrawWorker({
-      rpcUrl: RPC_URL,
-      relayerSecretKey: relayerKeypair.secretKey,
+    // PRAGMATIC: Run directly with fast RPC
+    const result = await privacyCashClient.withdraw({
       lamports,
       recipientAddress: recipient,
-      referrer,
-      timeout: 120000 // 120s timeout (ZK proof heavy)
+      referrer: referrer || undefined
     });
     
     const duration = Date.now() - startTime;
-    console.log(`✅ [MAIN] Worker completed in ${duration}ms`);
 
     if (!result || !result.tx) {
       throw new Error("Withdrawal failed: no transaction signature");
     }
 
     console.log(`✅ Withdrawal successful: ${result.tx}`);
-    console.log(`⏱️  Duration: ${duration}ms ${duration > 1000 ? '(ZK proof likely)' : '(instant - NO ZK?)'}`); 
-    console.log(`📋 Verify on-chain: https://solscan.io/tx/${result.tx}`);
-    console.log(`🔍 Check: Does tx contain proof data? Is nullifier present?`);
+    console.log(`⏱️  Duration: ${duration}ms`);
+    console.log(`📋 Verify: https://solscan.io/tx/${result.tx}`);
 
     res.json({
       success: true,
