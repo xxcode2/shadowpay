@@ -1,12 +1,20 @@
 // src/lib/api.ts
 
 const getApiUrl = () => {
-  // Use relative URLs for API calls - Vite proxy handles /api routing
-  return '/api';
+  // Use VITE_API_URL env var - must be absolute URL like http://localhost:3333
+  const url = import.meta.env.VITE_API_URL;
+  if (!url) {
+    console.error('❌ CRITICAL: VITE_API_URL not set! Add to .env.development:');
+    console.error('   VITE_API_URL=http://localhost:3333');
+    return '';
+  }
+  return url;
 };
 
 export async function fetchPrivateBalance(user_id: string): Promise<number> {
   const apiUrl = getApiUrl();
+  if (!apiUrl) throw new Error('API URL not configured');
+  
   const res = await fetch(`${apiUrl}/balance?user_id=${user_id}`);
   if (!res.ok) throw new Error("Failed to fetch balance");
   const data = await res.json();
@@ -15,6 +23,8 @@ export async function fetchPrivateBalance(user_id: string): Promise<number> {
 
 export async function withdrawFromBackend(opts: { user_id: string; amount: number; token: string; recipient: string }): Promise<{ success: boolean; txHash?: string; error?: string }> {
   const apiUrl = getApiUrl();
+  if (!apiUrl) return { success: false, error: 'API URL not configured' };
+  
   const res = await fetch(`${apiUrl}/withdraw`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -39,22 +49,37 @@ export async function fetchDashboardData(userId?: string): Promise<{ balance: nu
     }
 
     const apiUrl = getApiUrl();
+    if (!apiUrl) throw new Error('API URL not configured');
+
+    console.log(`📡 Fetching dashboard from: ${apiUrl}`);
 
     // Try to fetch balance first
-    const balanceRes = await fetch(`${apiUrl}/balance?user_id=${encodeURIComponent(userIdForFetch)}`);
+    const balanceUrl = `${apiUrl}/balance?user_id=${encodeURIComponent(userIdForFetch)}`;
+    console.log(`📡 Balance URL: ${balanceUrl}`);
+    const balanceRes = await fetch(balanceUrl);
+    
     if (!balanceRes.ok) {
-      console.error('Balance API error:', await balanceRes.text());
-      throw new Error("Failed to fetch balance");
+      const rawText = await balanceRes.text();
+      console.error('❌ Balance API error (status=' + balanceRes.status + '):', rawText.substring(0, 200));
+      throw new Error(`Balance API failed with status ${balanceRes.status}`);
     }
+    
     const balanceData = await balanceRes.json();
+    console.log('✅ Balance fetched:', balanceData);
     
     // Try to fetch payment links
-    const linksRes = await fetch(`${apiUrl}/payment-links?user_id=${encodeURIComponent(userIdForFetch)}`);
+    const linksUrl = `${apiUrl}/payment-links?user_id=${encodeURIComponent(userIdForFetch)}`;
+    console.log(`📡 Links URL: ${linksUrl}`);
+    const linksRes = await fetch(linksUrl);
+    
     if (!linksRes.ok) {
-      console.error('Payment links API error:', await linksRes.text());
-      throw new Error("Failed to fetch payment links");
+      const rawText = await linksRes.text();
+      console.error('❌ Links API error (status=' + linksRes.status + '):', rawText.substring(0, 200));
+      throw new Error(`Links API failed with status ${linksRes.status}`);
     }
+    
     const linksData = await linksRes.json();
+    console.log('✅ Links fetched:', linksData);
     
     return {
       balance: balanceData.balance || 0,

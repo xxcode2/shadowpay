@@ -108,7 +108,9 @@ const Withdraw = () => {
       if (hasBackendAuth) {
         // Use real ShadowPay SDK via server
         const apiPath = token === "SOL" ? "/withdraw/sol" : "/withdraw/spl";
-        const endpoint = `/api${apiPath}`;
+        const apiUrl = import.meta.env.VITE_API_URL;
+        if (!apiUrl) throw new Error('API URL not configured');
+        const endpoint = `${apiUrl}${apiPath}`;
         
         try {
           const res = await authFetch(endpoint, {
