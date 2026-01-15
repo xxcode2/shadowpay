@@ -355,6 +355,7 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
         amount: amount
       }
     });
+  } catch (err) {
     console.error("❌ Payment failed:", err.message);
     res.status(500).json({ error: err.message });
   }
