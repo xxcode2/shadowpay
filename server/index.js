@@ -90,8 +90,17 @@ const LINKS_FILE = path.resolve(__dirname, "links.json");
 
 const PORT = process.env.PORT || 3333;
 const RELAYER_URL = process.env.RELAYER_URL;
+const RELAYER_TIMEOUT = parseInt(process.env.RELAYER_TIMEOUT || '30000', 10); // 30 seconds default
 
-/* ───────────────────────── INIT ───────────────────────── */
+/* ─────────────────────── INIT ─────────────────────── */
+
+// CRITICAL: Validate environment before starting
+if (process.env.NODE_ENV === 'production' && !RELAYER_URL) {
+  console.error('❌ FATAL: RELAYER_URL must be set in production');
+  console.error('❌ Set RELAYER_URL in Railway to your relayer service URL');
+  console.error('❌ Example: https://shadowpay-relayer.up.railway.app');
+  process.exit(1);
+}
 
 validateJwtSecret();
 validatePrivateKey();
@@ -270,23 +279,37 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
     // ✅ CALL RELAYER - Relayer handles ALL ZK proof generation
     // Backend NEVER imports or calls Privacy Cash deposit
     // This prevents OOM in backend process
-    const relayerUrl = process.env.RELAYER_URL || "http://localhost:4444";
+    const relayerUrl = RELAYER_URL;
+    
+    if (!relayerUrl) {
+      throw new Error("RELAYER_URL not configured - backend cannot process payments");
+    }
     
     console.log(`📡 Forwarding to relayer: POST ${relayerUrl}/deposit`);
     
-    const relayerRes = await fetch(`${relayerUrl}/deposit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        lamports,
-        payerWallet,
-        linkId: link.id
-      })
-    });
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RELAYER_TIMEOUT);
+    
+    let relayerRes;
+    try {
+      relayerRes = await fetch(`${relayerUrl}/deposit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lamports,
+          payerWallet,
+          linkId: link.id
+        }),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!relayerRes.ok) {
       const errText = await relayerRes.text();
-      throw new Error(`Relayer failed: ${errText}`);
+      throw new Error(`Relayer error (${relayerRes.status}): ${errText}`);
     }
 
     const result = await relayerRes.json();
@@ -350,23 +373,37 @@ app.post(
       console.log(`   Link: ${link.id}`);
 
       const lamports = Math.floor(link.amount * 1000000000);
-      const relayerUrl = process.env.RELAYER_URL || "http://localhost:4444";
+      const relayerUrl = RELAYER_URL;
+      
+      if (!relayerUrl) {
+        throw new Error("RELAYER_URL not configured - backend cannot process withdrawals");
+      }
       
       console.log(`📡 Forwarding to relayer: POST ${relayerUrl}/withdraw`);
       
-      const relayerRes = await fetch(`${relayerUrl}/withdraw`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          commitment: link.commitment,
-          recipient: recipientWallet,
-          lamports
-        })
-      });
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), RELAYER_TIMEOUT);
+      
+      let relayerRes;
+      try {
+        relayerRes = await fetch(`${relayerUrl}/withdraw`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            commitment: link.commitment,
+            recipient: recipientWallet,
+            lamports
+          }),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!relayerRes.ok) {
         const errText = await relayerRes.text();
-        throw new Error(`Relayer failed: ${errText}`);
+        throw new Error(`Relayer error (${relayerRes.status}): ${errText}`);
       }
 
       const result = await relayerRes.json();
@@ -496,12 +533,22 @@ app.use((err, req, res, next) => {
 /* ───────────────────── START ───────────────────── */
 
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running on :${PORT}`);
-  console.log(`🔁 Using relayer at: ${process.env.RELAYER_URL || "http://localhost:4444"}`);
+  console.log(`🚀 Backend running on port ${PORT}`);
+  
+  if (!RELAYER_URL) {
+    console.warn(`⚠️  RELAYER_URL not configured - using fallback: http://localhost:4444`);
+    console.warn(`⚠️  This works for LOCAL TESTING ONLY`);
+    console.warn(`⚠️  For production, set RELAYER_URL to your relayer service URL`);
+  } else {
+    console.log(`🔁 Relayer at: ${RELAYER_URL}`);
+  }
+  
+  console.log(`⏱️  Relayer timeout: ${RELAYER_TIMEOUT}ms`);
   console.log(`\n✅ ARCHITECTURE VERIFIED:`);
   console.log(`   - LIGHTWEIGHT: No ZK proof generation`);
   console.log(`   - ORCHESTRATOR: Forwards payments to relayer`);
   console.log(`   - NO OOM: All heavy logic isolated in relayer`);
   console.log(`   - METADATA ONLY: Stores links, commitments, tx hashes`);
-  console.log(`   - STABLE: No uncontrolled memory usage\n`);
+  console.log(`   - STABLE: No uncontrolled memory usage`);
+  console.log(`   - RESILIENT: Timeout protection on relayer calls\n`);
 });

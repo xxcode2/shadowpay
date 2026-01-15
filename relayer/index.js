@@ -232,7 +232,19 @@ app.post("/withdraw", authenticateRequest, async (req, res) => {
    START
 ───────────────────────────────────── */
 const PORT = process.env.PORT || 4444;
+
+// CRITICAL: Validate environment in production
+const NODE_ENV = process.env.NODE_ENV || 'development';
+if (NODE_ENV === 'production' && !process.env.PORT) {
+  console.error('❌ FATAL: PORT environment variable must be set in production');
+  console.error('❌ Set PORT in Railway variables to expose relayer service');
+  process.exit(1);
+}
+
 app.listen(PORT, () => {
-  console.log(`🚀 Relayer running on ${PORT}`);
+  console.log(`🚀 Relayer running on port ${PORT}`);
+  console.log(`🌐 Service URL: ${process.env.SERVICE_URL || `http://localhost:${PORT}`}`);
+  console.log(`🔧 Environment: ${NODE_ENV}`);
+  console.log(`🔐 Auth required: ${RELAYER_SECRET ? 'Yes' : 'No (dev mode)'}`);
 });
 
