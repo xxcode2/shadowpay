@@ -20,7 +20,7 @@ export const NETWORKS = {
   },
   mainnet: {
     name: "Solana Mainnet",
-    rpcUrl: "https://api.mainnet-beta.solana.com",
+    rpcUrl: "https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c",
     wsUrl: "wss://api.mainnet-beta.solana.com",
     explorerUrl: "https://explorer.solana.com",
     symbol: "MAINNET",
