@@ -12,13 +12,9 @@ const getApiUrl = () => {
 };
 
 export async function fetchPrivateBalance(user_id: string): Promise<number> {
-  const apiUrl = getApiUrl();
-  if (!apiUrl) throw new Error('API URL not configured');
-  
-  const res = await fetch(`${apiUrl}/balance?user_id=${user_id}`);
-  if (!res.ok) throw new Error("Failed to fetch balance");
-  const data = await res.json();
-  return data.balance;
+  // TEMP: backend no longer exposes /balance endpoint
+  // Balance is always 0 - frontend doesn't need private balance for payment links
+  return 0;
 }
 
 export async function withdrawFromBackend(opts: { user_id: string; amount: number; token: string; recipient: string }): Promise<{ success: boolean; txHash?: string; error?: string }> {
@@ -53,19 +49,10 @@ export async function fetchDashboardData(userId?: string): Promise<{ balance: nu
 
     console.log(`📡 Fetching dashboard from: ${apiUrl}`);
 
-    // Try to fetch balance first
-    const balanceUrl = `${apiUrl}/balance?user_id=${encodeURIComponent(userIdForFetch)}`;
-    console.log(`📡 Balance URL: ${balanceUrl}`);
-    const balanceRes = await fetch(balanceUrl);
-    
-    if (!balanceRes.ok) {
-      const rawText = await balanceRes.text();
-      console.error('❌ Balance API error (status=' + balanceRes.status + '):', rawText.substring(0, 200));
-      throw new Error(`Balance API failed with status ${balanceRes.status}`);
-    }
-    
-    const balanceData = await balanceRes.json();
-    console.log('✅ Balance fetched:', balanceData);
+    // TEMP: backend no longer exposes /balance endpoint
+    // Balance is always 0 - frontend doesn't need private balance
+    const balanceData = { balance: 0 };
+    console.log('✅ Balance: 0 (endpoint removed)');
     
     // Try to fetch payment links
     const linksUrl = `${apiUrl}/payment-links?user_id=${encodeURIComponent(userIdForFetch)}`;
