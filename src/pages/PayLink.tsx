@@ -187,27 +187,7 @@ const PayLink = () => {
       // const commitment = result.commitment;
       
     } catch (error: any) {
-      console.error("Payment error:", error);
-
-        if (!confirmRes.ok) {
-          const errData = await confirmRes.json();
-          console.warn('Payment metadata sync warning:', errData.error);
-        } else {
-          const confirmData = await confirmRes.json();
-          console.log('✅ Payment metadata synced to backend:', confirmData);
-        }
-      } catch (syncErr) {
-        console.warn('⚠️ Payment metadata sync failed (non-critical):', syncErr);
-        // Don't fail the entire payment for this, just warn
-      }
-
-      // Step 5: Show success
-      toast.success('Payment Confirmed!', {
-        description: `Transaction sent successfully. Deposit confirmed to Privacy Cash pool.`,
-      });
-      setTimeout(() => setPaymentState('success'), 400);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Payment failed";
+      const message = error instanceof Error ? error.message : "Payment failed";
       console.error("❌ Payment error:", message);
       setError(message);
       
@@ -218,6 +198,7 @@ const PayLink = () => {
       
       setPaymentState("confirm");
     }
+  };
   };
 
   return (
