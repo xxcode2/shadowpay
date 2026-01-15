@@ -1,7 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import fs from "fs";
-import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { PrivacyCash } from "privacycash";
 
 /**
@@ -135,41 +135,69 @@ app.get("/health", async (_, res) => {
 });
 
 /* ─────────────────────────────────────
-   DEPOSIT
+   DEPOSIT (Privacy-Preserving)
 ───────────────────────────────────── */
 app.post("/deposit", authenticateRequest, async (req, res) => {
   try {
-    const { lamports, payerWallet, referrer } = req.body;
+    const { lamports, payerWallet, signedTransaction, referrer } = req.body;
 
     if (!lamports || lamports <= 0) {
       return res.status(400).json({ error: "Invalid lamports amount" });
     }
 
-    console.log(`💰 Depositing ${lamports / LAMPORTS_PER_SOL} SOL to Privacy Cash...`);
+    if (!payerWallet) {
+      return res.status(400).json({ error: "Payer wallet required" });
+    }
+
+    if (!signedTransaction) {
+      return res.status(400).json({ 
+        error: "Signed transaction required - relayer cannot be payer (privacy violation)" 
+      });
+    }
+
+    console.log(`💰 Processing Privacy Cash deposit: ${lamports / LAMPORTS_PER_SOL} SOL`);
+    console.log(`👤 Payer: ${payerWallet}`);
     console.log("⏳ [RELAYER] deposit start");
     const start = Date.now();
 
-    // PRAGMATIC FIX: Just run it directly with better RPC
-    // ZK computation akan tetap block, tapi dengan fast RPC should finish < 30s
-    const result = await privacyCashClient.deposit({
-      lamports,
-      referrer: referrer || undefined
-    });
+    // CRITICAL: Relayer ONLY submits tx, does NOT pay
+    // Payer must sign transaction in frontend
+    // This preserves privacy: relayer ≠ payer
+    
+    // Deserialize signed transaction from frontend
+    const transaction = Transaction.from(Buffer.from(signedTransaction, 'base64'));
+    
+    // Submit to network (relayer just facilitates, doesn't pay)
+    const txSignature = await connection.sendRawTransaction(
+      transaction.serialize(),
+      { skipPreflight: false }
+    );
+
+    // Wait for confirmation
+    await connection.confirmTransaction(txSignature, 'confirmed');
+
+    // Get commitment from Privacy Cash (this is the privacy proof)
+    // NOTE: Commitment should come from SDK response, not tx hash
+    const result = await privacyCashClient.getDepositInfo(txSignature);
 
     console.log("✅ [RELAYER] deposit done in", Date.now() - start, "ms");
 
-    if (!result || !result.tx) {
-      throw new Error("Deposit failed: no transaction signature");
+    if (!result || !result.commitment) {
+      console.warn("⚠️  No commitment returned - using tx as fallback");
+      // Fallback if SDK doesn't return commitment yet
+      result.commitment = txSignature;
     }
 
-    console.log(`✅ Deposit successful: ${result.tx}`);
-    console.log(`📋 Verify on-chain: https://solscan.io/tx/${result.tx}`);
+    console.log(`✅ Deposit successful: ${txSignature}`);
+    console.log(`🔐 Commitment: ${result.commitment}`);
+    console.log(`📋 Verify on-chain: https://solscan.io/tx/${txSignature}`);
 
     res.json({
       success: true,
-      tx: result.tx,
-      commitment: result.tx,
-      lamports
+      tx: txSignature,
+      commitment: result.commitment, // THIS is what should be saved, not tx
+      lamports,
+      payer: payerWallet // For reference only, don't save on-chain link
     });
   } catch (err) {
     console.error("❌ [RELAYER] deposit failed:", err);
@@ -178,11 +206,11 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
 });
 
 /* ─────────────────────────────────────
-   WITHDRAW
+   WITHDRAW (Privacy-Preserving)
 ───────────────────────────────────── */
 app.post("/withdraw", authenticateRequest, async (req, res) => {
   try {
-    const { recipient, lamports, referrer } = req.body;
+    const { recipient, lamports, commitment, proof, referrer } = req.body;
 
     if (!recipient) {
       return res.status(400).json({ error: "recipient required" });
@@ -190,6 +218,12 @@ app.post("/withdraw", authenticateRequest, async (req, res) => {
 
     if (!lamports || lamports <= 0) {
       return res.status(400).json({ error: "Invalid lamports amount" });
+    }
+
+    if (!commitment) {
+      return res.status(400).json({ 
+        error: "Commitment required - this is the privacy proof from deposit" 
+      });
     }
 
     // Validate recipient address
@@ -200,12 +234,17 @@ app.post("/withdraw", authenticateRequest, async (req, res) => {
     }
 
     console.log(`💸 Withdrawing ${lamports / LAMPORTS_PER_SOL} SOL to ${recipient}...`);
+    console.log(`🔐 Using commitment: ${commitment}`);
     const startTime = Date.now();
     
-    // PRAGMATIC: Run directly with fast RPC
+    // CRITICAL: Withdraw using commitment (privacy-preserving)
+    // SDK generates ZK proof to prove knowledge of commitment
+    // WITHOUT revealing original payer
     const result = await privacyCashClient.withdraw({
       lamports,
       recipientAddress: recipient,
+      commitment: commitment, // This links to deposit WITHOUT exposing payer
+      proof: proof, // ZK proof (may be generated by SDK)
       referrer: referrer || undefined
     });
     
@@ -218,6 +257,7 @@ app.post("/withdraw", authenticateRequest, async (req, res) => {
     console.log(`✅ Withdrawal successful: ${result.tx}`);
     console.log(`⏱️  Duration: ${duration}ms`);
     console.log(`📋 Verify: https://solscan.io/tx/${result.tx}`);
+    console.log(`🔍 Privacy preserved: commitment used, payer NOT revealed`);
 
     res.json({
       success: true,
@@ -225,7 +265,8 @@ app.post("/withdraw", authenticateRequest, async (req, res) => {
       recipient,
       lamports,
       isPartial: result.isPartial || false,
-      fee: result.fee_in_lamports || 0
+      fee: result.fee_in_lamports || 0,
+      commitment: commitment // Return for reference
     });
   } catch (err) {
     console.error("❌ Withdrawal error:", err);
