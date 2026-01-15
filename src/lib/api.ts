@@ -18,16 +18,13 @@ export async function fetchPrivateBalance(user_id: string): Promise<number> {
 }
 
 export async function withdrawFromBackend(opts: { user_id: string; amount: number; token: string; recipient: string }): Promise<{ success: boolean; txHash?: string; error?: string }> {
-  const apiUrl = getApiUrl();
-  if (!apiUrl) return { success: false, error: 'API URL not configured' };
-  
-  const res = await fetch(`${apiUrl}/withdraw`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(opts),
-  });
-  if (!res.ok) return { success: false, error: "Failed to withdraw" };
-  return res.json();
+  // TEMP: Direct /withdraw endpoint removed from backend
+  // All withdrawals now go through /links/:id/claim (payment link flow)
+  console.warn("Direct withdraw disabled. Use payment link claim instead.");
+  return {
+    success: false,
+    error: "Direct withdraw disabled. Use payment link claim."
+  };
 }
 
 // Add the missing fetchDashboardData function with better error handling
