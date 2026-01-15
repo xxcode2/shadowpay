@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import fs from "fs";
 import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { PrivacyCash } from "privacycash";
+import { runDepositWorker } from "./depositWorker.js";
+import { runWithdrawWorker } from "./withdrawWorker.js";
 
 /**
  * ShadowPay Relayer Service
@@ -130,20 +132,21 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
 
     console.log(`💰 Depositing ${lamports / LAMPORTS_PER_SOL} SOL to Privacy Cash...`);
 
-    // CRITICAL: This calls Privacy Cash SDK which should:
-    // 1. Create on-chain transaction to Privacy Cash program
-    // 2. Generate cryptographic commitment
-    // 3. Store commitment in on-chain Merkle tree
-    // Runtime verification needed: inspect tx on Solscan
-    console.log("⏳ [RELAYER] deposit start");
+    // ⚡ CRITICAL FIX: Run ZK deposit in WORKER THREAD
+    // This prevents blocking Express event loop
+    // Railway timeout fixed: main thread tetap responsive
+    console.log("⏳ [MAIN] Spawning deposit worker thread...");
     const start = Date.now();
 
-    const result = await privacyCashClient.deposit({
+    const result = await runDepositWorker({
+      rpcUrl: RPC_URL,
+      relayerSecretKey: relayerKeypair.secretKey,
       lamports,
-      referrer: referrer || undefined
+      referrer,
+      timeout: 90000 // 90s timeout (ZK proof bisa lama)
     });
 
-    console.log("✅ [RELAYER] deposit done in", Date.now() - start, "ms");
+    console.log("✅ [MAIN] Worker completed in", Date.now() - start, "ms");
 
     if (!result || !result.tx) {
       throw new Error("Deposit failed: no transaction signature");
@@ -189,26 +192,23 @@ app.post("/withdraw", authenticateRequest, async (req, res) => {
 
     console.log(`💸 Withdrawing ${lamports / LAMPORTS_PER_SOL} SOL to ${recipient}...`);
 
-    // CRITICAL: This should trigger ZK proof generation
-    // Expected behavior:
-    // 1. Generate ZK proof of commitment knowledge
-    // 2. Prove commitment exists in Merkle tree
-    // 3. Submit proof to Privacy Cash program
-    // 4. Program verifies proof and sends SOL to recipient
-    // 
-    // ⚠️  VERIFICATION NEEDED:
-    // - Does this take 1-3 seconds (proof generation)?
-    // - Does transaction contain proof data?
-    // - Is nullifier enforced to prevent double-spend?
+    // ⚡ CRITICAL FIX: Run ZK withdraw in WORKER THREAD
+    // Withdraw requires ZK proof generation (HEAVY computation)
+    // Without worker → freeze event loop → 502 timeout
+    console.log("⏳ [MAIN] Spawning withdraw worker thread...");
     const startTime = Date.now();
     
-    const result = await privacyCashClient.withdraw({
+    const result = await runWithdrawWorker({
+      rpcUrl: RPC_URL,
+      relayerSecretKey: relayerKeypair.secretKey,
       lamports,
       recipientAddress: recipient,
-      referrer: referrer || undefined
+      referrer,
+      timeout: 120000 // 120s timeout (ZK proof heavy)
     });
     
     const duration = Date.now() - startTime;
+    console.log(`✅ [MAIN] Worker completed in ${duration}ms`);
 
     if (!result || !result.tx) {
       throw new Error("Withdrawal failed: no transaction signature");
