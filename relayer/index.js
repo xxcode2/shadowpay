@@ -35,21 +35,21 @@ app.use(express.json());
 // CRITICAL SECURITY: Add authentication middleware
 // TODO: Implement HMAC authentication between backend ↔ relayer
 // Current risk: Anyone can call relayer endpoints (DOS vector)
-const RELAYER_SECRET = process.env.RELAYER_SECRET;
-if (!RELAYER_SECRET) {
-  console.warn("⚠️  WARNING: RELAYER_SECRET not set - endpoints are UNPROTECTED");
+const RELAYER_AUTH_SECRET = process.env.RELAYER_AUTH_SECRET;
+if (!RELAYER_AUTH_SECRET) {
+  console.warn("⚠️  WARNING: RELAYER_AUTH_SECRET not set - endpoints are UNPROTECTED");
   console.warn("⚠️  Anyone can submit transactions via this relayer");
-  console.warn("⚠️  Set RELAYER_SECRET in .env for production");
+  console.warn("⚠️  Set RELAYER_AUTH_SECRET in .env for production");
 }
 
 function authenticateRequest(req, res, next) {
-  if (!RELAYER_SECRET) {
+  if (!RELAYER_AUTH_SECRET) {
     // Skip auth if not configured (dev mode)
     return next();
   }
   
   const authHeader = req.headers['x-relayer-auth'];
-  if (authHeader !== RELAYER_SECRET) {
+  if (authHeader !== RELAYER_AUTH_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   
