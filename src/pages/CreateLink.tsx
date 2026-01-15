@@ -58,6 +58,7 @@ const CreateLink = () => {
           linkUsageType,
           amountType,
           creator_id: publicKey || "unknown",
+          expiryHours: expiryHours ? parseInt(expiryHours) : undefined,
         }),
       });
 

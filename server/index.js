@@ -148,7 +148,7 @@ app.post("/auth/login", async (req, res) => {
 /* ───────────────────── LINKS ───────────────────── */
 
 app.post("/links", async (req, res) => {
-  const { amount, token, creator_id } = req.body;
+  const { amount, token, creator_id, expiryHours } = req.body;
 
   if (!amount || !creator_id) {
     return res.status(400).json({ error: "amount & creator_id required" });
@@ -156,6 +156,13 @@ app.post("/links", async (req, res) => {
 
   const map = await loadLinks();
   const id = Math.random().toString(36).slice(2, 9);
+
+  // Calculate expiration timestamp if expiryHours provided
+  let expiresAt = undefined;
+  if (expiryHours && expiryHours > 0) {
+    expiresAt = Date.now() + (expiryHours * 60 * 60 * 1000); // Convert hours to ms
+    console.log(`📅 Link ${id} expires at: ${new Date(expiresAt).toISOString()}`);
+  }
 
   const link = {
     id,
@@ -165,7 +172,8 @@ app.post("/links", async (req, res) => {
     status: "created",
     commitment: null,
     payment_count: 0,
-    created_at: Date.now()
+    created_at: Date.now(),
+    expiresAt
   };
 
   map[id] = link;
@@ -186,6 +194,13 @@ app.get("/links/:id", async (req, res) => {
   const map = await loadLinks();
   const link = map[req.params.id];
   if (!link) return res.status(404).json({ error: "not found" });
+  
+  // Check if link is expired
+  const now = Date.now();
+  if (link.expiresAt && now > link.expiresAt) {
+    return res.json({ success: true, link: { ...link, status: "expired" } });
+  }
+  
   res.json({ success: true, link });
 });
 
@@ -350,9 +365,16 @@ app.get("/payment-links", async (req, res) => {
   if (!user) return res.json({ links: [] });
 
   const map = await loadLinks();
-  const links = Object.values(map).filter(
-    (l) => l.creator_id === user
-  );
+  const links = Object.values(map)
+    .filter((l) => l.creator_id === user)
+    .map((link) => {
+      // Check if link is expired
+      const now = Date.now();
+      if (link.expiresAt && now > link.expiresAt) {
+        return { ...link, status: "expired" };
+      }
+      return link;
+    });
 
   res.json({ success: true, links });
 });
