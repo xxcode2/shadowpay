@@ -279,38 +279,6 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
   }
 
   try {
-    // � MODEL B - TRUE NON-CUSTODIAL PRIVACY:
-    // 1. CLIENT signs deposit transaction (user wallet)
-    // 2. Backend receives SIGNED transaction from client
-    // 3. Relayer BROADCASTS transaction (does NOT sign)
-    // 4. Privacy preserved: client = signer, relayer = broadcaster only
-    //
-    // WHY: If relayer signs deposits, relayer knows deposit origin (privacy leak)
-    // SAME MODEL AS: Tornado Cash, Railgun, Aztec
-    
-    console.log(`💳 Processing MODEL B deposit (client-signed)...`);
-    console.log(`   Amount: ${amount} SOL`);
-    console.log(`   Payer: ${payerWallet}`);
-    console.log(`   Link: ${link.id}`);
-    console.log(`   Mode: Client-signed (NON-CUSTODIAL)`);
-
-    const lamports = Math.floor(amount * 1000000000);
-    
-    // ✅ CALL RELAYER - Relayer ONLY broadcasts (does NOT sign)
-    const relayerUrl = RELAYER_URL;
-    
-    if (!relayerUrl) {
-      throw new Error("RELAYER_URL not configured - backend cannot process payments");
-    }
-    
-    console.log(`📡 Sending CLIENT-SIGNED tx to relayer for broadcast: POST ${relayerUrl}/deposit`);
-    
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), RELAYER_TIMEOUT);
-    
-    let relayerRes;
-    try {
     // 🔒 MODEL B - BACKEND STORES METADATA ONLY:
     // 1. Client already submitted deposit to RPC (client-side)
     // 2. Backend receives: tx hash + commitment + link info
@@ -335,7 +303,7 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
     // Update link with deposit metadata
     link.txHash = tx;
     link.commitment = commitment;
-    link.status = "active";
+    link.status = "paid";
     link.payment_count = (link.payment_count || 0) + 1;
     link.updated_at = Date.now();
     
@@ -343,7 +311,7 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
     await saveLinks(map);
     
     console.log("✅ Deposit metadata stored successfully");
-    console.log(`   Link ${link.id} now active with commitment`);
+    console.log(`   Link ${link.id} now paid with commitment`);
     
     res.json({
       success: true,
@@ -351,7 +319,7 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
         id: link.id,
         txHash: tx,
         commitment: commitment,
-        status: "active",
+        status: "paid",
         amount: amount
       }
     });
