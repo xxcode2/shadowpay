@@ -52,14 +52,14 @@ export const TOKENS = {
     name: "USDC",
     symbol: "USDC",
     decimals: 6,
-    mint: "EPjFWaLb3odcccccccccccccccccccccccccccccccc", // Mainnet
-    testnetMint: "4zMMC9srt5Ri5X14niQT69nsH+kP6xvFkMscL86yQ54=", // Devnet USDC
+    mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // Mainnet USDC
+    testnetMint: "4zMMC9srt5Ri5X14GrkiUWF2PjaPXSusFqGUvJdgAuEi", // Devnet USDC
   },
   USDT: {
     name: "Tether",
     symbol: "USDT",
     decimals: 6,
-    mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenEsl", // Mainnet
+    mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // Mainnet USDT
     testnetMint: null,
   },
 } as const;
