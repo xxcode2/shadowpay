@@ -154,11 +154,14 @@ async function initialize() {
   return privacyCashClient;
 }
 
-// Run initialization and store client
-let privacyCashClient = null;
+// Run initialization to validate environment
+// NOTE: SDK instance created PER REQUEST to prevent state conflicts
+let sdkInitialized = false;
 (async () => {
   try {
-    privacyCashClient = await initialize();
+    const testClient = await initialize();
+    sdkInitialized = true;
+    console.log("✅ Privacy Cash SDK validated - will create instance per request");
   } catch (err) {
     console.error("❌ Initialization failed:", err);
     process.exit(1);
@@ -215,8 +218,8 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
     console.log("   Link:", linkId);
     console.log("   Fee payer: Relayer (privacy-preserving)");
 
-    // Wait for SDK to be ready
-    if (!privacyCashClient) {
+    // Wait for SDK to be validated
+    if (!sdkInitialized) {
       return res.status(503).json({ 
         error: "Privacy Cash SDK not initialized yet. Retry in a few seconds." 
       });
@@ -225,9 +228,17 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
     const startTime = Date.now();
 
     // 🔐 PRIVACY CASH DEPOSIT (THE CORE)
-    // Relayer signs and pays gas - user identity hidden
+    // Create fresh SDK instance PER REQUEST to prevent state conflicts
+    // This is critical: SDK has internal state (UTXO cache, commitment tree)
+    // Concurrent requests with shared instance = race conditions
+    console.log("🔐 Creating fresh Privacy Cash SDK instance...");
+    const client = new PrivacyCash({
+      RPC_url: RPC_URL,
+      owner: relayerKeypair
+    });
+    
     console.log("🔐 Calling Privacy Cash SDK deposit()...");
-    const result = await privacyCashClient.deposit({
+    const result = await client.deposit({
       lamports: depositLamports,
     });
 
@@ -288,9 +299,16 @@ app.post("/withdraw", authenticateRequest, async (req, res) => {
     const startTime = Date.now();
     
     // CRITICAL: Withdraw using commitment (privacy-preserving)
+    // Create fresh SDK instance PER REQUEST to prevent state conflicts
+    console.log("🔐 Creating fresh Privacy Cash SDK instance...");
+    const client = new PrivacyCash({
+      RPC_url: RPC_URL,
+      owner: relayerKeypair
+    });
+    
     // SDK generates ZK proof to prove knowledge of commitment
     // WITHOUT revealing original payer
-    const result = await privacyCashClient.withdraw({
+    const result = await client.withdraw({
       lamports,
       recipientAddress: recipient,
       commitment: commitment, // This links to deposit WITHOUT exposing payer
@@ -343,16 +361,16 @@ app.listen(PORT, async () => {
   console.log(`🔧 Environment: ${NODE_ENV}`);
   console.log(`🔐 Auth required: ${RELAYER_AUTH_SECRET ? 'Yes' : 'No (dev mode)'}\n`);
   
-  // Wait for initialization to complete
+  // Wait for SDK validation to complete
   let attempts = 0;
   const maxAttempts = 30;
-  while (!privacyCashClient && attempts < maxAttempts) {
+  while (!sdkInitialized && attempts < maxAttempts) {
     await new Promise(resolve => setTimeout(resolve, 100));
     attempts++;
   }
   
-  if (!privacyCashClient) {
-    console.error("\n❌ FATAL: Privacy Cash client not initialized after 3 seconds!");
+  if (!sdkInitialized) {
+    console.error("\n❌ FATAL: Privacy Cash SDK not validated after 3 seconds!");
     console.error("❌ Check logs above for initialization errors");
     process.exit(1);
   }

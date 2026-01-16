@@ -6,19 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { useWallet } from "@/hooks/use-wallet";
 
-// Privacy Cash SDK singleton per session (prevents state conflicts)
-let cachedPrivacyCash: any = null;
+// NO WALLET NEEDED - Relayer signs everything
+// User just clicks Pay button, relayer handles Privacy Cash deposit
 
 const PayLink = () => {
-  const { connected, publicKey, connect } = useWallet();
   const [paymentState, setPaymentState] = useState<"confirm" | "processing" | "success">("confirm");
-  
-  // Reset SDK singleton when wallet changes (prevent stale state)
-  useEffect(() => {
-    cachedPrivacyCash = null;
-  }, [publicKey?.toString()]);
   const [error, setError] = useState<string | null>(null);
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
@@ -70,12 +63,6 @@ const PayLink = () => {
     // Prevent double-click (critical: stops duplicate payments)
     if (paymentState === "processing") return;
     
-    // Check wallet connection first
-    if (!connected || !publicKey) {
-      setError("Please connect your wallet first");
-      return;
-    }
-
     // Validate payment amount
     if (!paymentData?.amount || paymentData.amount === "—" || isNaN(parseFloat(paymentData.amount))) {
       setError("Invalid payment amount. This link requires a fixed amount but none was specified. Please contact the sender.");
@@ -111,8 +98,8 @@ const PayLink = () => {
       console.log("💰 Starting Privacy Cash deposit...");
       console.log("   Amount:", paymentData.amount, token);
       console.log("   Link ID:", linkId);
-      console.log("   Wallet:", publicKey);
       console.log("   Architecture: Browser → Backend → Relayer → Privacy Cash SDK");
+      console.log("   User wallet: NOT NEEDED (relayer signs)");
 
       const amount = parseFloat(paymentData.amount);
 
@@ -247,16 +234,6 @@ const PayLink = () => {
                       </Alert>
                     )}
 
-                    {/* Wallet Connection Warning */}
-                    {!connected && (
-                      <Alert className="mb-6 bg-yellow-500/10 border-yellow-500/30">
-                        <AlertCircle className="h-4 w-4 text-yellow-600" />
-                        <AlertDescription className="text-yellow-700">
-                          You need to connect your wallet to pay. Click the button above.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
                     {/* Privacy Model Info */}
                     <Alert className="mb-4 border-blue-500/30 bg-blue-500/5">
                       <Info className="h-4 w-4 text-blue-600" />
@@ -276,34 +253,19 @@ const PayLink = () => {
                     </div>
 
                     {/* Pay Button */}
-                    {!connected ? (
-                      <Button
-                        variant="hero"
-                        size="xl"
-                        className="w-full group"
-                        onClick={connect}
-                      >
-                        <Lock className="w-5 h-5" />
-                        Connect Wallet to Pay
-                        <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="hero"
-                        size="xl"
-                        className="w-full group"
-                        onClick={handlePay}
-                      >
-                        <Lock className="w-5 h-5" />
-                        Pay {paymentData?.amount} {paymentData?.token}
-                        <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-                      </Button>
-                    )}
+                    <Button
+                      variant="hero"
+                      size="xl"
+                      className="w-full group"
+                      onClick={handlePay}
+                    >
+                      <Lock className="w-5 h-5" />
+                      Pay {paymentData?.amount} {paymentData?.token}
+                      <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                    </Button>
 
                     <p className="text-xs text-muted-foreground text-center mt-4">
-                      {connected 
-                        ? `Paying from: ${publicKey?.slice(0, 8)}...${publicKey?.slice(-4)}`
-                        : "Connect your wallet to complete the payment"}
+                      Payment processed privately via relayer
                     </p>
                   </motion.div>
                 )}
