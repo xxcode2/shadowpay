@@ -57,8 +57,20 @@ router.post('/deposit', async (req, res) => {
     });
 
     if (!relayerResponse.ok) {
-      const error = await relayerResponse.json();
-      throw new Error(error.error || 'Relayer deposit failed');
+      const errorText = await relayerResponse.text();
+      let errorMessage = 'Relayer deposit failed';
+      
+      try {
+        const error = JSON.parse(errorText);
+        errorMessage = error.error || error.message || errorText;
+      } catch {
+        errorMessage = errorText || `HTTP ${relayerResponse.status}`;
+      }
+      
+      console.error('❌ Relayer error:', errorMessage);
+      console.error('❌ Status:', relayerResponse.status);
+      
+      throw new Error(errorMessage);
     }
 
     const result = await relayerResponse.json();

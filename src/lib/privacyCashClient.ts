@@ -62,8 +62,17 @@ export async function requestDeposit(request: DepositRequest): Promise<DepositRe
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Deposit request failed');
+      let errorMessage = 'Deposit request failed';
+      try {
+        const error = await response.json();
+        errorMessage = error.message || error.error || JSON.stringify(error);
+      } catch (e) {
+        // Response is not JSON, try text
+        const text = await response.text();
+        errorMessage = text || `HTTP ${response.status}: ${response.statusText}`;
+      }
+      console.error('❌ Backend error response:', errorMessage);
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -75,6 +84,8 @@ export async function requestDeposit(request: DepositRequest): Promise<DepositRe
     return data;
   } catch (error) {
     console.error('❌ Deposit request failed:', error);
+    console.error('   API URL:', `${API_BASE_URL}/api/privacy/deposit`);
+    console.error('   Error type:', error instanceof Error ? error.constructor.name : typeof error);
     throw error;
   }
 }
@@ -103,8 +114,16 @@ export async function requestWithdraw(request: WithdrawRequest): Promise<Withdra
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Withdrawal request failed');
+      let errorMessage = 'Withdrawal request failed';
+      try {
+        const error = await response.json();
+        errorMessage = error.message || error.error || JSON.stringify(error);
+      } catch (e) {
+        const text = await response.text();
+        errorMessage = text || `HTTP ${response.status}: ${response.statusText}`;
+      }
+      console.error('❌ Backend error response:', errorMessage);
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();

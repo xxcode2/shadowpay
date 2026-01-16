@@ -82,6 +82,26 @@ const relayerKeypair = Keypair.fromSecretKey(Uint8Array.from(secret));
 
 console.log("🧾 Relayer:", relayerKeypair.publicKey.toBase58());
 
+// Check relayer SOL balance
+const connection = new Connection(RPC_URL, 'confirmed');
+const relayerBalance = await connection.getBalance(relayerKeypair.publicKey);
+console.log(`💰 Relayer SOL balance: ${relayerBalance / LAMPORTS_PER_SOL} SOL`);
+
+if (relayerBalance === 0) {
+  console.error("❌ CRITICAL: Relayer has 0 SOL balance!");
+  console.error("❌ Cannot pay transaction fees!");
+  console.error(`❌ Please send SOL to: ${relayerKeypair.publicKey.toBase58()}`);
+  console.error("❌ Minimum: 0.1 SOL for transaction fees");
+  process.exit(1);
+}
+
+if (relayerBalance < 0.01 * LAMPORTS_PER_SOL) {
+  console.warn("⚠️  WARNING: Low SOL balance!");
+  console.warn(`⚠️  Current: ${relayerBalance / LAMPORTS_PER_SOL} SOL`);
+  console.warn(`⚠️  Recommended: 0.1 SOL minimum`);
+  console.warn(`⚠️  Send SOL to: ${relayerKeypair.publicKey.toBase58()}`);
+}
+
 /* ─────────────────────────────────────
    PRIVACY CASH CLIENT
 ───────────────────────────────────── */
