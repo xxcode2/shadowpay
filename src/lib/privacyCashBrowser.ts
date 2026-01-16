@@ -54,16 +54,26 @@ export class PrivacyCashBrowser {
             // Load wasm (3.1 MB)
             onProgress?.(10);
             const wasmRes = await fetch('/circuits/transaction2.wasm');
-            if (!wasmRes.ok) throw new Error(`Failed to load wasm: ${wasmRes.status}`);
+            if (!wasmRes.ok) {
+                throw new Error(`Failed to load wasm: ${wasmRes.status} - Circuit files may not be deployed. Check Vercel deployment.`);
+            }
             const wasm = await wasmRes.arrayBuffer();
+            if (wasm.byteLength === 0) {
+                throw new Error('Circuit wasm file is empty! Circuit files not properly deployed.');
+            }
             console.log('✅ Loaded transaction2.wasm:', (wasm.byteLength / 1024 / 1024).toFixed(2), 'MB');
             
             onProgress?.(50);
             
             // Load zkey (16 MB)
             const zkeyRes = await fetch('/circuits/transaction2.zkey');
-            if (!zkeyRes.ok) throw new Error(`Failed to load zkey: ${zkeyRes.status}`);
+            if (!zkeyRes.ok) {
+                throw new Error(`Failed to load zkey: ${zkeyRes.status} - Circuit files may not be deployed. Check Vercel deployment.`);
+            }
             const zkey = await zkeyRes.arrayBuffer();
+            if (zkey.byteLength === 0) {
+                throw new Error('Circuit zkey file is empty! Circuit files not properly deployed.');
+            }
             console.log('✅ Loaded transaction2.zkey:', (zkey.byteLength / 1024 / 1024).toFixed(2), 'MB');
             
             this.circuits = { wasm, zkey };
