@@ -29,7 +29,8 @@ dist-ssr
 relayer/.env
 relayer/cache/
 
-# Privacy Cash circuit files (19MB - host on CDN for production)
-# For local dev, run: cp privacy-cash-sdk/circuit2/*.{wasm,zkey} public/circuits/
-public/circuits/*.wasm
-public/circuits/*.zkey
+# Privacy Cash circuit files
+# NOTE: These are 19MB files committed for now
+# TODO: Move to CDN for production
+# public/circuits/*.wasm
+# public/circuits/*.zkey
