@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import "./polyfills"; // Load polyfills FIRST for Privacy Cash SDK
 import "./index.css";
 
 async function mount() {

@@ -18,16 +18,32 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(),
+    mode === "development" && componentTagger()
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Polyfills for Privacy Cash SDK Node.js dependencies
+      buffer: "buffer",
+      crypto: "crypto-browserify",
+      stream: "stream-browserify",
+      util: "util",
     },
   },
   define: {
     __VITE_ENV__: JSON.stringify({
       SUPABASE_URL: process.env.VITE_SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY,
-    })
-  }
+    }),
+    global: "globalThis",
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: "globalThis",
+      },
+    },
+  },
 }));

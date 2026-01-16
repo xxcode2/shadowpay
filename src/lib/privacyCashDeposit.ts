@@ -1,19 +1,16 @@
 /**
- * Privacy Cash SDK Integration for ShadowPay
+ * Privacy Cash SDK Integration
  * 
- * ARCHITECTURE:
- * - Uses OFFICIAL Privacy Cash SDK (privacycash npm package)
- * - SDK class-based approach: new PrivacyCash({ RPC_url, owner })
- * - SDK handles: ZK proofs, Merkle trees, nullifiers, relayer, UTXO storage
- * - ShadowPay provides: UI/UX, wallet signing, payment links
+ * Official Privacy Cash SDK wrapper for browser environment.
+ * SDK handles: ZK proofs, Merkle trees, nullifiers, UTXO encryption.
  * 
- * CRITICAL: The SDK is audited by Zigtur and handles all on-chain complexity.
+ * IMPORTANT: SDK designed for Node.js, browser support via polyfills.
+ * See src/polyfills.ts and vite.config.ts for compatibility layer.
  */
 
 import { 
   Connection, 
   PublicKey,
-  Keypair,
   LAMPORTS_PER_SOL 
 } from "@solana/web3.js";
 import { PrivacyCash } from "privacycash";
