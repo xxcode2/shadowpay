@@ -1,8 +1,8 @@
 /**
  * Privacy Cash API Routes
  * 
- * Backend endpoints untuk Privacy Cash operations via relayer.
- * Semua ZK proof generation dan SDK operations di relayer.
+ * SIMPLIFIED: Direct SOL transfers for deposits
+ * Privacy Cash SDK used only for withdrawals (ZK proofs)
  */
 
 import express from 'express';
@@ -14,37 +14,27 @@ const RELAYER_URL = process.env.RELAYER_URL || 'http://localhost:4444';
 const RELAYER_AUTH_SECRET = process.env.RELAYER_AUTH_SECRET;
 
 /**
- * POST /api/privacy/build-deposit
- * Request backend to build unsigned deposit transaction
- * Backend uses Privacy Cash SDK (Node.js only)
- * Returns unsigned transaction for user to sign in browser
+ * POST /api/privacy/deposit
+ * Record deposit transaction (user pays directly with Phantom)
+ * Privacy Cash used only for withdrawals when recipient claims
  */
-router.post('/build-deposit', async (req, res) => {
+router.post('/deposit', async (req, res) => {
   try {
-    const { amount, walletAddress, linkId } = req.body;
+    const { txSignature, linkId, amount } = req.body;
 
-    if (!amount || amount <= 0) {
+    if (!txSignature) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid amount'
+        message: 'Transaction signature required'
       });
     }
 
-    if (!walletAddress) {
-      return res.status(400).json({
-        success: false,
-        message: 'Wallet address required'
-      });
-    }
+    console.log(`📝 Recording deposit...`);
+    console.log(`   TX: ${txSignature}`);
+    console.log(`   Link: ${linkId || 'none'}`);
 
-    const lamports = Math.floor(amount * 1_000_000_000);
-
-    console.log(`🔨 Requesting unsigned deposit transaction from relayer...`);
-    console.log(`   Amount: ${amount} SOL`);
-    console.log(`   User: ${walletAddress}`);
-
-    // Request relayer to build unsigned transaction
-    const relayerResponse = await fetch(`${RELAYER_URL}/build-deposit`, {
+    // Forward to relayer for verification
+    const relayerResponse = await fetch(`${RELAYER_URL}/deposit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,15 +43,15 @@ router.post('/build-deposit', async (req, res) => {
         })
       },
       body: JSON.stringify({
-        lamports,
-        userPublicKey: walletAddress,
+        txSignature,
         linkId,
+        amount
       })
     });
 
     if (!relayerResponse.ok) {
       const errorText = await relayerResponse.text();
-      let errorMessage = 'Failed to build transaction';
+      let errorMessage = 'Failed to verify deposit';
       
       try {
         const error = JSON.parse(errorText);
@@ -76,48 +66,22 @@ router.post('/build-deposit', async (req, res) => {
 
     const result = await relayerResponse.json();
     
-    console.log(`✅ Unsigned transaction received from relayer`);
+    console.log(`✅ Deposit recorded`);
 
     res.json({
       success: true,
-      unsignedTransaction: result.unsignedTransaction,
-      commitment: result.commitment,
-      nullifier: result.nullifier,
+      txSignature,
+      verified: result.verified
     });
 
   } catch (error) {
-    console.error('❌ Build deposit failed:', error);
+    console.error('❌ Record deposit failed:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to build transaction'
+      message: error.message || 'Failed to record deposit'
     });
   }
 });
-
-/**
- * POST /api/privacy/submit-deposit
- * Submit user-signed deposit transaction to relayer
- */
-router.post('/submit-deposit', async (req, res) => {
-  try {
-    const { signedTransaction, linkId } = req.body;
-
-    if (!signedTransaction) {
-      return res.status(400).json({
-        success: false,
-        message: 'signedTransaction required'
-      });
-    }
-
-    console.log(`📡 Submitting signed deposit to relayer...`);
-
-    // Forward signed transaction to relayer
-    const relayerResponse = await fetch(`${RELAYER_URL}/submit-deposit`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(RELAYER_AUTH_SECRET && {
-          'x-relayer-auth': RELAYER_AUTH_SECRET
         })
       },
       body: JSON.stringify({
