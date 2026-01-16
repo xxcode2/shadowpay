@@ -202,6 +202,7 @@ export class PrivacyCashBrowser {
      * 1. Create deterministic seed from public key
      * 2. Apply keccak256 to get encryption key
      * 3. Apply keccak256 again to get UTXO private key
+     * 4. Mod by FIELD_SIZE to ensure it fits in the prime field
      */
     private deriveUtxoPrivateKey(publicKey: PublicKey): string {
         // Use publicKey bytes as deterministic seed (simplified for browser)
@@ -213,9 +214,13 @@ export class PrivacyCashBrowser {
         
         // Step 2: Derive UTXO private key from encryption key
         // Matches SDK: this.utxoPrivateKeyV2 = '0x' + keccak256(encryptionKeyV2).slice(2)
-        const utxoPrivateKey = keccak256(encryptionKey);
+        const utxoPrivateKeyHex = keccak256(encryptionKey);
         
-        return utxoPrivateKey; // Already has '0x' prefix
+        // Step 3: Mod by FIELD_SIZE (matches Keypair constructor in SDK)
+        const rawDecimal = BigInt(utxoPrivateKeyHex);
+        const privkeyBN = new BN((rawDecimal % BigInt(FIELD_SIZE.toString())).toString());
+        
+        return '0x' + privkeyBN.toString(16); // Return as hex with 0x prefix
     }
 
     /**
