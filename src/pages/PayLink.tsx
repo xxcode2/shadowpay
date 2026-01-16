@@ -95,74 +95,40 @@ const PayLink = () => {
       return;
     }
 
+    // Hard fail if linkId missing (prevent orphaned commitments)
+    if (!linkId) {
+      setError("Invalid payment link (missing link ID)");
+      toast.error('Invalid Link', {
+        description: 'Link ID not found. Please check the URL.',
+      });
+      return;
+    }
+
     setError(null);
     setPaymentState("processing");
 
     try {
-      // Get Phantom wallet
-      const phantom = (window as any).phantom?.solana;
-      if (!phantom) {
-        throw new Error("Phantom wallet not found. Please install Phantom extension.");
-      }
-
       console.log("💰 Starting Privacy Cash deposit...");
       console.log("   Amount:", paymentData.amount, token);
       console.log("   Link ID:", linkId);
       console.log("   Wallet:", publicKey);
-      console.log("   Architecture: Privacy Cash SDK → ZK Proof → Backend → Relayer");
+      console.log("   Architecture: Browser → Backend → Relayer → Privacy Cash SDK");
 
       const amount = parseFloat(paymentData.amount);
-      const amountLamports = Math.floor(amount * 1_000_000_000);
 
-      // Use Privacy Cash SDK (the CORRECT way)
-      console.log("\n🔐 Initializing Privacy Cash SDK...");
-      console.log("   SDK will handle: ZK proof, commitment, nullifier");
-      console.log("   User signs TX, backend submits via relayer");
+      // Call backend API - let relayer handle Privacy Cash SDK
+      console.log("\n📤 Calling backend deposit API...");
+      console.log("   Backend will:");
+      console.log("   1. Forward request to relayer");
+      console.log("   2. Relayer runs Privacy Cash SDK");
+      console.log("   3. ZK proof generated on server");
+      console.log("   4. Transaction submitted to blockchain");
       
-      const { initializePrivacyCash, depositSOL } = await import('../lib/privacyCashDeposit');
-      const rpcUrl = import.meta.env.VITE_RPC_URL || 'https://api.mainnet-beta.solana.com';
+      const { requestDeposit } = await import('../lib/privacyCashClient');
       
-      // SDK instance reference for wallet adapter closure
-      let sdkInstance: any = null;
-      
-      // Initialize SDK with Phantom wallet adapter (full interface)
-      const walletAdapter = {
-        publicKey: phantom.publicKey,
-        signTransaction: phantom.signTransaction.bind(phantom),
-        signAllTransactions: phantom.signAllTransactions?.bind(phantom),
-        // Use SDK's connection (not separate instance) to prevent status mismatch
-        sendTransaction: async (tx: any) => {
-          const signed = await phantom.signTransaction(tx);
-          return sdkInstance.connection.sendRawTransaction(signed.serialize());
-        }
-      };
-      
-      // Use singleton to prevent state conflicts (UTXO cache, commitment tree)
-      sdkInstance = cachedPrivacyCash ??= await initializePrivacyCash(
-        rpcUrl,
-        walletAdapter,
-        true
-      );
-      const privacyCashInstance = sdkInstance;
-
-      console.log("✅ Privacy Cash SDK initialized");
-
-      // Hard fail if linkId missing (prevent orphaned commitments)
-      if (!linkId) {
-        throw new Error("Invalid payment link (missing link ID)");
-      }
-
-      // Deposit via Privacy Cash (correct flow)
-      console.log("\n💰 Calling Privacy Cash deposit...");
-      console.log("   This will:");
-      console.log("   1. Generate ZK proof");
-      console.log("   2. User signs TX with Phantom");
-      console.log("   3. Backend submits to relayer");
-      console.log("   4. Relayer submits to blockchain");
-      
-      const depositResult = await depositSOL({
-        amountLamports,
-        privacyCash: privacyCashInstance,
+      const depositResult = await requestDeposit({
+        amount,
+        walletAddress: publicKey,
         linkId: linkId,
       });
 
