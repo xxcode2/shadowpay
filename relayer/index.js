@@ -45,14 +45,19 @@ if (!RELAYER_AUTH_SECRET) {
 function authenticateRequest(req, res, next) {
   if (!RELAYER_AUTH_SECRET) {
     // Skip auth if not configured (dev mode)
+    console.log('⚠️  Auth skipped (RELAYER_AUTH_SECRET not set)');
     return next();
   }
   
   const authHeader = req.headers['x-relayer-auth'];
   if (authHeader !== RELAYER_AUTH_SECRET) {
+    console.error('❌ Auth failed:');
+    console.error('   Expected auth header:', RELAYER_AUTH_SECRET.substring(0, 10) + '...');
+    console.error('   Received auth header:', authHeader ? authHeader.substring(0, 10) + '...' : 'MISSING');
     return res.status(401).json({ error: 'Unauthorized' });
   }
   
+  console.log('✅ Auth successful');
   next();
 }
 
@@ -217,13 +222,6 @@ app.post("/deposit", authenticateRequest, async (req, res) => {
     console.log("   Amount:", depositLamports / LAMPORTS_PER_SOL, "SOL");
     console.log("   Link:", linkId);
     console.log("   Fee payer: Relayer (privacy-preserving)");
-
-    // Wait for SDK to be validated
-    if (!sdkInitialized) {
-      return res.status(503).json({ 
-        error: "Privacy Cash SDK not initialized yet. Retry in a few seconds." 
-      });
-    }
 
     const startTime = Date.now();
 

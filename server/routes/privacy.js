@@ -70,8 +70,14 @@ router.post('/deposit', async (req, res) => {
         errorMessage = errorText || `HTTP ${relayerResponse.status}`;
       }
       
-      console.error('❌ Relayer error:', errorMessage);
-      throw new Error(errorMessage);
+      // CRITICAL: Log for debugging
+      console.error('❌ Relayer error response:');
+      console.error('   Status:', relayerResponse.status);
+      console.error('   Message:', errorMessage);
+      console.error('   URL:', `${RELAYER_URL}/deposit`);
+      console.error('   Auth header present:', !!RELAYER_AUTH_SECRET);
+      
+      throw new Error(`Relayer error (${relayerResponse.status}): ${errorMessage}`);
     }
 
     const result = await relayerResponse.json();
