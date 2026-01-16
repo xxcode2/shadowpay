@@ -237,8 +237,8 @@ VITE_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 
 **Backend** (Railway):
 ```bash
-RELAYER_URL=https://your-relayer.railway.app
-RELAYER_AUTH_SECRET=your-secret-token
+RELAYER_URL=https://shadowpay-production-8362.up.railway.app
+RELAYER_AUTH_SECRET=shadowpay-relayer-secret-123
 JWT_SECRET=your-jwt-secret
 SUPABASE_URL=your-supabase-url
 SUPABASE_SERVICE_KEY=your-service-key
@@ -248,7 +248,7 @@ SUPABASE_SERVICE_KEY=your-service-key
 ```bash
 PRIVATE_KEY=your-relayer-solana-keypair
 SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
-RELAYER_AUTH_SECRET=your-secret-token
+RELAYER_AUTH_SECRET=shadowpay-relayer-secret-123
 ```
 
 ### Deployment Order
