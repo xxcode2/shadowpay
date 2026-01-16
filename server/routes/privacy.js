@@ -82,48 +82,6 @@ router.post('/deposit', async (req, res) => {
     });
   }
 });
-        })
-      },
-      body: JSON.stringify({
-        signedTransaction,
-        linkId,
-      })
-    });
-
-    if (!relayerResponse.ok) {
-      const errorText = await relayerResponse.text();
-      let errorMessage = 'Relayer submission failed';
-      
-      try {
-        const error = JSON.parse(errorText);
-        errorMessage = error.error || error.message || errorText;
-      } catch {
-        errorMessage = errorText || `HTTP ${relayerResponse.status}`;
-      }
-      
-      console.error('❌ Relayer error:', errorMessage);
-      throw new Error(errorMessage);
-    }
-
-    const result = await relayerResponse.json();
-    
-    console.log(`✅ Deposit submitted successfully`);
-    console.log(`   TX: ${result.tx}`);
-
-    res.json({
-      success: true,
-      txSignature: result.tx,
-      message: 'Deposit successful'
-    });
-
-  } catch (error) {
-    console.error('❌ Submit deposit failed:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Deposit failed'
-    });
-  }
-});
 
 /**
  * POST /api/privacy/withdraw
