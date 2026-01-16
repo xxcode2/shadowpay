@@ -15,32 +15,30 @@ const RELAYER_AUTH_SECRET = process.env.RELAYER_AUTH_SECRET;
 
 /**
  * POST /api/privacy/deposit
- * Request deposit to Privacy Cash pool via relayer
+ * Forward user-signed Privacy Cash deposit transaction to relayer
+ * 
+ * Architecture:
+ * 1. Frontend: User builds & signs TX with Privacy Cash SDK
+ * 2. Backend: Receives signed TX and forwards to relayer
+ * 3. Relayer: Submits signed TX to blockchain
+ * 
+ * NOTE: User is fee payer (Privacy Cash design requirement)
  */
 router.post('/deposit', async (req, res) => {
   try {
-    const { lamports, walletAddress, linkId } = req.body;
+    const { signedTransaction, linkId } = req.body;
 
-    if (!lamports || lamports <= 0) {
+    if (!signedTransaction) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid amount'
+        message: 'signedTransaction required (user must sign in browser)'
       });
     }
 
-    if (!walletAddress) {
-      return res.status(400).json({
-        success: false,
-        message: 'Wallet address required'
-      });
-    }
-
-    console.log(`📡 Forwarding deposit request to relayer...`);
-    console.log(`   Amount: ${lamports / 1e9} SOL`);
-    console.log(`   Wallet: ${walletAddress}`);
+    console.log(`📡 Forwarding signed deposit transaction to relayer...`);
     console.log(`   Link: ${linkId || 'none'}`);
 
-    // Call relayer service
+    // Forward signed transaction to relayer
     const relayerResponse = await fetch(`${RELAYER_URL}/deposit`, {
       method: 'POST',
       headers: {
@@ -50,15 +48,14 @@ router.post('/deposit', async (req, res) => {
         })
       },
       body: JSON.stringify({
-        lamports,
-        payerPublicKey: walletAddress,
+        signedTransaction,
         linkId,
       })
     });
 
     if (!relayerResponse.ok) {
       const errorText = await relayerResponse.text();
-      let errorMessage = 'Relayer deposit failed';
+      let errorMessage = 'Relayer submission failed';
       
       try {
         const error = JSON.parse(errorText);
@@ -75,15 +72,12 @@ router.post('/deposit', async (req, res) => {
 
     const result = await relayerResponse.json();
     
-    console.log(`✅ Deposit successful via relayer`);
+    console.log(`✅ Deposit transaction submitted successfully`);
     console.log(`   TX: ${result.tx}`);
-    console.log(`   Commitment: ${result.commitment}`);
 
     res.json({
       success: true,
       txSignature: result.tx,
-      commitment: result.commitment,
-      amount: lamports / 1e9,
       message: 'Deposit successful'
     });
 
