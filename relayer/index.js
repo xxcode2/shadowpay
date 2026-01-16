@@ -80,57 +80,90 @@ const connection = new Connection(RPC_URL, "confirmed");
 const secret = JSON.parse(fs.readFileSync(RELAYER_KEYPAIR_PATH, "utf8"));
 const relayerKeypair = Keypair.fromSecretKey(Uint8Array.from(secret));
 
-console.log("🧾 Relayer:", relayerKeypair.publicKey.toBase58());
-
-// Check relayer SOL balance (using existing connection)
-const relayerBalance = await connection.getBalance(relayerKeypair.publicKey);
-console.log(`💰 Relayer SOL balance: ${relayerBalance / LAMPORTS_PER_SOL} SOL`);
-
-if (relayerBalance === 0) {
-  console.error("❌ CRITICAL: Relayer has 0 SOL balance!");
-  console.error("❌ Cannot pay transaction fees!");
-  console.error(`❌ Please send SOL to: ${relayerKeypair.publicKey.toBase58()}`);
-  console.error("❌ Minimum: 0.1 SOL for transaction fees");
-  process.exit(1);
-}
-
-if (relayerBalance < 0.01 * LAMPORTS_PER_SOL) {
-  console.warn("⚠️  WARNING: Low SOL balance!");
-  console.warn(`⚠️  Current: ${relayerBalance / LAMPORTS_PER_SOL} SOL`);
-  console.warn(`⚠️  Recommended: 0.1 SOL minimum`);
-  console.warn(`⚠️  Send SOL to: ${relayerKeypair.publicKey.toBase58()}`);
-}
+console.log("🧾 Relayer Public Key:", relayerKeypair.publicKey.toBase58());
 
 /* ─────────────────────────────────────
-   PRIVACY CASH CLIENT
+   INITIALIZATION (ASYNC)
 ───────────────────────────────────── */
-// CRITICAL: Relayer uses Privacy Cash SDK to:
-// 1. Deposit funds to Privacy Cash pool (on-chain)
-// 2. Withdraw funds from Privacy Cash pool (on-chain)
-// 3. Sign transactions with its own keypair (privacy preserving)
-// 4. NEVER store user keys or balances
-let privacyCashClient = null;
+async function initialize() {
+  console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("🔍 RELAYER INITIALIZATION");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-try {
-  privacyCashClient = new PrivacyCash({
-    RPC_url: RPC_URL,
-    owner: relayerKeypair
-  });
-  console.log("✅ Privacy Cash client initialized for relayer");
+  // 1. Check relayer SOL balance (CRITICAL)
+  console.log("1️⃣  Checking SOL balance...");
+  const relayerBalance = await connection.getBalance(relayerKeypair.publicKey);
+  const balanceSOL = relayerBalance / LAMPORTS_PER_SOL;
   
-  // Try to fetch balance to verify SDK is ready
-  // This will trigger any initialization needed by SDK
-  try {
-    const privateBalance = await privacyCashClient.getPrivateBalance();
-    console.log(`💰 Current private balance: ${privateBalance} lamports`);
-  } catch (balanceErr) {
-    console.log("⚠️  Could not fetch initial balance (may be first use):", balanceErr.message);
-    // Don't exit - this is non-critical, user may not have balance yet
+  console.log(`💰 Relayer SOL balance: ${balanceSOL} SOL`);
+  
+  if (relayerBalance === 0) {
+    console.error("\n❌━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("❌ CRITICAL ERROR: RELAYER HAS 0 SOL BALANCE!");
+    console.error("❌━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("\n❌ Cannot pay transaction fees!");
+    console.error(`❌ Send SOL to: ${relayerKeypair.publicKey.toBase58()}`);
+    console.error("❌ Minimum required: 0.1 SOL");
+    console.error("❌ Recommended: 0.5 SOL (for ~5000 transactions)");
+    console.error("\n❌ Use Phantom wallet or Solana CLI:");
+    console.error(`   solana transfer ${relayerKeypair.publicKey.toBase58()} 0.1 --url mainnet-beta`);
+    console.error("\n❌━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    process.exit(1);
   }
-} catch (err) {
-  console.error("❌ Failed to initialize Privacy Cash client:", err);
-  process.exit(1);
+  
+  if (relayerBalance < 0.01 * LAMPORTS_PER_SOL) {
+    console.warn("\n⚠️ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.warn("⚠️  WARNING: LOW SOL BALANCE!");
+    console.warn("⚠️ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.warn(`⚠️  Current: ${balanceSOL} SOL`);
+    console.warn(`⚠️  Recommended: 0.1 SOL minimum`);
+    console.warn(`⚠️  Send SOL to: ${relayerKeypair.publicKey.toBase58()}`);
+    console.warn("⚠️ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  } else {
+    console.log(`✅ Balance sufficient for operations\n`);
+  }
+
+  // 2. Initialize Privacy Cash SDK
+  console.log("2️⃣  Initializing Privacy Cash SDK...");
+  let privacyCashClient = null;
+  
+  try {
+    privacyCashClient = new PrivacyCash({
+      RPC_url: RPC_URL,
+      owner: relayerKeypair
+    });
+    console.log("✅ Privacy Cash SDK initialized\n");
+    
+    // 3. Test SDK connection
+    console.log("3️⃣  Testing SDK connection...");
+    try {
+      const privateBalance = await privacyCashClient.getPrivateBalance();
+      console.log(`✅ SDK connected - Private balance: ${privateBalance} lamports\n`);
+    } catch (balanceErr) {
+      console.log("⚠️  Could not fetch balance (may be first use)\n");
+    }
+  } catch (err) {
+    console.error("\n❌ Failed to initialize Privacy Cash SDK:", err);
+    process.exit(1);
+  }
+
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("✅ INITIALIZATION COMPLETE");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+  return privacyCashClient;
 }
+
+// Run initialization and store client
+let privacyCashClient = null;
+(async () => {
+  try {
+    privacyCashClient = await initialize();
+  } catch (err) {
+    console.error("❌ Initialization failed:", err);
+    process.exit(1);
+  }
+})();
 
 /* ─────────────────────────────────────
    HEALTH
@@ -309,10 +342,26 @@ if (NODE_ENV === 'production' && !process.env.PORT) {
   process.exit(1);
 }
 
-app.listen(PORT, () => {
-  console.log(`🚀 Relayer running on port ${PORT}`);
+app.listen(PORT, async () => {
+  console.log(`\n🚀 Relayer server starting on port ${PORT}...`);
   console.log(`🌐 Service URL: ${process.env.SERVICE_URL || `http://localhost:${PORT}`}`);
   console.log(`🔧 Environment: ${NODE_ENV}`);
-  console.log(`🔐 Auth required: ${RELAYER_AUTH_SECRET ? 'Yes' : 'No (dev mode)'}`);
+  console.log(`🔐 Auth required: ${RELAYER_AUTH_SECRET ? 'Yes' : 'No (dev mode)'}\n`);
+  
+  // Wait for initialization to complete
+  let attempts = 0;
+  const maxAttempts = 30;
+  while (!privacyCashClient && attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
+  }
+  
+  if (!privacyCashClient) {
+    console.error("\n❌ FATAL: Privacy Cash client not initialized after 3 seconds!");
+    console.error("❌ Check logs above for initialization errors");
+    process.exit(1);
+  }
+  
+  console.log("✅ Relayer is ready to accept requests!\n");
 });
 
