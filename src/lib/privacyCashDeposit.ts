@@ -24,7 +24,9 @@ import {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Privacy Cash Program ID (mainnet-beta)
-const PRIVACY_PROGRAM_ID = new PublicKey("privacyV3gFKhaPRXYzRmZjCdYGdsDKHAbuPE8YKd5CWU");
+// TODO: Replace with actual Privacy Cash program ID from official deployment
+// This is a placeholder - using System Program for now to avoid initialization errors
+const PRIVACY_PROGRAM_ID = new PublicKey("11111111111111111111111111111111"); // SystemProgram as placeholder
 
 // Circuit paths
 const CIRCUIT_WASM_PATH = "/circuit2/transaction2.wasm";
