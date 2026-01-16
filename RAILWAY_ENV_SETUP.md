@@ -1,28 +1,43 @@
 ## 🚀 Railway Environment Setup
 
-### Required Variables
+### BACKEND Service Variables
 
-Go to Railway Dashboard → Your Service → Variables → Add the following:
+Go to Railway Dashboard → Backend Service → Variables → Add:
 
 ```bash
-SOLANA_RPC_URL=https://devnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c
-RELAYER_SECRET=shadowpay-relayer-secret-123
+RELAYER_URL=https://shadowpay-production-8362.up.railway.app
+RELAYER_AUTH_SECRET=shadowpay-relayer-secret-123
+PORT=3333
 NODE_ENV=production
 ```
 
-### Why Helius RPC?
+### RELAYER Service Variables
 
-**BEFORE (Free RPC):**
-- ZK proof: 20-30s
-- Railway timeout: 30s
-- Result: ❌ 502 timeout
+Go to Railway Dashboard → Relayer Service → Variables → Add:
 
-**AFTER (Helius RPC):**
-- ZK proof: 3-8s ✅
-- Railway timeout: 30s
-- Result: ✅ Success in time
+```bash
+RELAYER_AUTH_SECRET=shadowpay-relayer-secret-123
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c
+RELAYER_KEYPAIR_PATH=/app/relayer.json
+PORT=4444
+NODE_ENV=production
+```
 
-### Test After Deploy
+**CRITICAL:** `RELAYER_AUTH_SECRET` must be IDENTICAL in both services!
+
+##1. Test relayer directly (with auth)
+curl -X POST https://shadowpay-production-8362.up.railway.app/deposit \
+  -H "Content-Type: application/json" \
+  -H "x-relayer-auth: shadowpay-relayer-secret-123" \
+  -d '{"amount":0.0001,"linkId":"test-relayer"}'
+
+# 2. Test via backend (backend forwards to relayer)
+curl -X POST https://your-backend-url.railway.app/api/privacy/deposit \
+  -H "Content-Type: application/json" \
+  -d '{"amount":0.0001,"linkId":"test-backend"}'
+
+# Expected: {"success": true, "txSignature": "..."}
+# Time: 10-30s (ZK proof generation)Deploy
 
 ```bash
 # Wait 1-2 minutes for Railway redeploy
