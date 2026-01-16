@@ -133,9 +133,11 @@ async function initialize() {
   let privacyCashClient = null;
   
   try {
+    // Privacy Cash SDK accepts: string (base58) | number[] | Uint8Array | Keypair
+    // Pass the secret key array directly (64 bytes)
     privacyCashClient = new PrivacyCash({
       RPC_url: RPC_URL,
-      owner: relayerKeypair
+      owner: secret  // Pass the secret array directly, not Keypair object
     });
     console.log("✅ Privacy Cash SDK initialized\n");
     
@@ -225,13 +227,18 @@ app.post("/build-deposit", authenticateRequest, async (req, res) => {
 
     const startTime = Date.now();
 
-    // CORRECT APPROACH: Relayer uses its own keypair to sign
-    // Privacy Cash SDK will create encrypted UTXO for relayer's wallet
-    // User will later be able to claim/withdraw from pool
+    // Create Privacy Cash SDK instance for this request
+    console.log("🔐 Creating Privacy Cash SDK instance...");
+    const client = new PrivacyCash({
+      RPC_url: RPC_URL,
+      owner: secret  // Relayer's secret key
+    });
+
+    // Execute deposit - relayer pays gas, creates encrypted UTXO
     console.log("🔐 Executing deposit via relayer...");
     console.log("   ⏳ Generating ZK proof (10-30 seconds)...");
     
-    const result = await privacyCashClient.deposit({
+    const result = await client.deposit({
       lamports: lamports
     });
 
