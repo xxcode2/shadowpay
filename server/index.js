@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import fetch from "node-fetch";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -250,7 +250,7 @@ app.get("/links/:id", async (req, res) => {
 /* ───────────────────── PAY (DEPOSIT) ───────────────────── */
 
 app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
-  const { tx, commitment, amount, linkId } = req.body;
+  const { transferTx, lamports, payerPublicKey, linkId } = req.body;
   const map = await loadLinks();
   const link = map[req.params.id];
 
@@ -259,50 +259,62 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
     return res.status(400).json({ error: "Already paid" });
   }
 
-  if (!amount || amount <= 0) {
+  if (!lamports || lamports <= 0) {
     return res.status(400).json({ error: "Invalid amount" });
   }
 
-  // MODEL B REQUIREMENT: Backend receives METADATA only
-  // Client already submitted deposit transaction to RPC
-  // Backend NEVER signs or constructs deposits
-  if (!tx) {
+  if (!transferTx) {
     return res.status(400).json({ 
-      error: "MODEL B: Transaction hash required. Client must submit deposit to RPC directly." 
+      error: "Transfer transaction required" 
     });
   }
-  
-  if (!commitment) {
+
+  if (!payerPublicKey) {
     return res.status(400).json({ 
-      error: "MODEL B: Commitment required. Extract from deposit transaction." 
+      error: "Payer public key required" 
     });
   }
 
   try {
-    // 🔒 MODEL B - BACKEND STORES METADATA ONLY:
-    // 1. Client already submitted deposit to RPC (client-side)
-    // 2. Backend receives: tx hash + commitment + link info
-    // 3. Backend stores metadata
-    // 4. Backend NEVER touches private keys
-    // 5. Backend NEVER calls relayer for deposits
-    //
-    // WHY: Deposit must happen client-side to preserve privacy
-    // SAME MODEL AS: Tornado Cash, Railgun, Aztec
-    
-    console.log(`💳 Storing MODEL B deposit metadata...`);
-    console.log(`   Amount: ${amount} SOL`);
-    console.log(`   TX: ${tx}`);
-    console.log(`   Commitment: ${commitment}`);
+    console.log(`💳 Processing Privacy Cash deposit via relayer...`);
+    console.log(`   Amount: ${lamports / LAMPORTS_PER_SOL} SOL`);
+    console.log(`   Transfer TX: ${transferTx}`);
+    console.log(`   Payer: ${payerPublicKey}`);
     console.log(`   Link: ${link.id}`);
-    console.log(`   Mode: Client-side deposit (NON-CUSTODIAL)`);
 
-    // Verify transaction on-chain (optional but recommended)
-    console.log(`🔍 Verifying transaction on-chain...`);
-    // TODO: connection.getTransaction(tx) to verify it exists
+    // Call relayer service to deposit to Privacy Cash pool
+    console.log(`📡 Calling relayer service...`);
+    const relayerResponse = await fetch(`${RELAYER_URL}/deposit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(process.env.RELAYER_AUTH_SECRET && {
+          "x-relayer-auth": process.env.RELAYER_AUTH_SECRET
+        })
+      },
+      body: JSON.stringify({
+        lamports,
+        payerPublicKey,
+        linkId: link.id,
+        referrer: link.referrer || undefined
+      })
+    });
+
+    if (!relayerResponse.ok) {
+      const error = await relayerResponse.json();
+      throw new Error(`Relayer deposit failed: ${error.error || 'Unknown error'}`);
+    }
+
+    const depositResult = await relayerResponse.json();
     
+    console.log(`✅ Privacy Cash deposit successful!`);
+    console.log(`   Deposit TX: ${depositResult.tx}`);
+    console.log(`   Commitment: ${depositResult.commitment}`);
+
     // Update link with deposit metadata
-    link.txHash = tx;
-    link.commitment = commitment;
+    link.txHash = depositResult.tx;
+    link.commitment = depositResult.commitment;
+    link.transferTx = transferTx; // Store the user → relayer transfer
     link.status = "paid";
     link.payment_count = (link.payment_count || 0) + 1;
     link.updated_at = Date.now();
@@ -310,17 +322,17 @@ app.post("/links/:id/pay", paymentLimiter, async (req, res) => {
     map[link.id] = link;
     await saveLinks(map);
     
-    console.log("✅ Deposit metadata stored successfully");
-    console.log(`   Link ${link.id} now paid with commitment`);
+    console.log("✅ Link metadata updated");
     
     res.json({
       success: true,
+      tx: depositResult.tx,
+      commitment: depositResult.commitment,
+      lamports: depositResult.lamports,
       link: {
         id: link.id,
-        txHash: tx,
-        commitment: commitment,
         status: "paid",
-        amount: amount
+        amount: lamports / LAMPORTS_PER_SOL
       }
     });
   } catch (err) {

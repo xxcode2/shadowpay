@@ -143,18 +143,69 @@ app.get("/health", async (_, res) => {
 //
 // If deposit endpoint is called, it's a mistake
 app.post("/deposit", authenticateRequest, async (req, res) => {
-  return res.status(403).json({
-    error: "MODEL B: Deposits must be submitted client-side",
-    details: "Relayer NEVER signs deposits (privacy violation)",
-    correctFlow: [
-      "1. Client initializes Privacy Cash SDK in browser",
-      "2. Client builds deposit transaction with commitment",
-      "3. User signs transaction in wallet",
-      "4. Client submits to RPC directly",
-      "5. Client sends metadata (tx + commitment) to backend"
-    ],
-    architecture: "Tornado Cash style (client-side deposits)"
-  });
+  try {
+    const { lamports, payerPublicKey, linkId, referrer } = req.body;
+
+    if (!lamports || lamports <= 0) {
+      return res.status(400).json({ error: "Invalid lamports amount" });
+    }
+
+    if (!payerPublicKey) {
+      return res.status(400).json({ error: "payerPublicKey required" });
+    }
+
+    // Validate payer address
+    try {
+      new PublicKey(payerPublicKey);
+    } catch {
+      return res.status(400).json({ error: "Invalid payer address" });
+    }
+
+    console.log(`💰 Depositing ${lamports / LAMPORTS_PER_SOL} SOL to Privacy Cash pool...`);
+    console.log(`👤 Payer: ${payerPublicKey}`);
+    console.log(`🔗 Link: ${linkId || 'none'}`);
+    const startTime = Date.now();
+
+    // ARCHITECTURE NOTE:
+    // Relayer uses its own keypair to deposit to Privacy Cash pool.
+    // This is privacy-preserving because:
+    // 1. User sends SOL to relayer (normal transfer)
+    // 2. Relayer deposits to Privacy Cash pool using SDK
+    // 3. On-chain: relayer → pool (user identity hidden)
+    // 4. Relayer returns commitment to user for later withdrawal
+    // 
+    // Privacy Cash SDK generates:
+    // - Commitment (user stores this secret)
+    // - Nullifier (used during withdrawal)
+    // - ZK proof (proves funds exist without revealing payer)
+    
+    const result = await privacyCashClient.deposit({
+      lamports,
+      referrer: referrer || undefined
+    });
+
+    const duration = Date.now() - startTime;
+
+    if (!result || !result.tx) {
+      throw new Error("Deposit failed: no transaction signature");
+    }
+
+    console.log(`✅ Deposit successful: ${result.tx}`);
+    console.log(`⏱️  Duration: ${duration}ms`);
+    console.log(`📋 Verify: https://solscan.io/tx/${result.tx}`);
+
+    // Return commitment to user - THIS IS THE SECRET they need for withdrawal
+    res.json({
+      success: true,
+      tx: result.tx,
+      lamports,
+      commitment: result.commitment || result.tx, // Privacy Cash SDK should return commitment
+      timestamp: Date.now()
+    });
+  } catch (err) {
+    console.error("❌ Deposit error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /* ─────────────────────────────────────

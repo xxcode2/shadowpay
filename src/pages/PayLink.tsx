@@ -6,16 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import { getLinkDetails, payLink } from "@/lib/privacyCash";
 import { useWallet } from "@/hooks/use-wallet";
 import { 
   Connection, 
   PublicKey, 
-  Transaction, 
-  SystemProgram,
   LAMPORTS_PER_SOL 
 } from "@solana/web3.js";
-import { depositSOL, EncryptionService } from "@/lib/privacyCashDeposit";
+import {
+  initializePrivacyCash,
+  depositSOL as sdkDepositSOL,
+} from "@/lib/privacyCashDeposit";
 
 const PayLink = () => {
   const { connected, publicKey, connect } = useWallet();
@@ -23,7 +23,6 @@ const PayLink = () => {
   const [error, setError] = useState<string | null>(null);
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
-  const [encryptionService] = useState(() => new EncryptionService());
   
   const [paymentData, setPaymentData] = useState<{ amount?: string; token?: string } | null>({
     amount: undefined,
@@ -42,8 +41,7 @@ const PayLink = () => {
     const urlToken = params.get('token');
     
     if (urlAmount && urlToken) {
-      // Payment data embedded in URL - works across users!
-      console.log('✅ Payment data from URL:', { amount: urlAmount, token: urlToken });
+      console.log('Payment data from URL:', { amount: urlAmount, token: urlToken });
       setPaymentData({ amount: urlAmount, token: urlToken });
       return;
     }
@@ -82,19 +80,17 @@ const PayLink = () => {
       return;
     }
 
-    // Expiry check handled by backend
-
     if (!paymentData?.amount) {
       setError("Invalid payment amount");
       return;
     }
 
-    // Token validation: For devnet demo, only SOL is supported
+    // Token validation: For now, only SOL is supported
     const token = paymentData.token || 'SOL';
     if (token !== 'SOL') {
-      setError(`Sorry, only SOL payments are supported on devnet. This link requires ${token}.`);
+      setError(`Sorry, only SOL payments are supported. This link requires ${token}.`);
       toast.error('Token Not Supported', {
-        description: `This link requires ${token}, but only SOL is available on devnet demo.`,
+        description: `This link requires ${token}, but only SOL is available.`,
       });
       return;
     }
@@ -109,90 +105,59 @@ const PayLink = () => {
         throw new Error("Phantom wallet not found. Please install Phantom extension.");
       }
 
-      console.log("💳 MODEL B: Client-side deposit (Privacy Cash)...");
-      console.log("Amount:", paymentData.amount, token);
-      console.log("Link ID:", linkId);
-      console.log("Wallet:", publicKey);
+      console.log("Starting OFFICIAL Privacy Cash SDK deposit...");
+      console.log("   Amount:", paymentData.amount, token);
+      console.log("   Link ID:", linkId);
+      console.log("   Wallet:", publicKey);
 
       // Get network (mainnet for Privacy Cash)
       const network = 'mainnet-beta';
       const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c';
 
-      console.log(`🌐 Network: ${network}`);
-      console.log(`🔗 RPC: ${rpcUrl}`);
+      console.log(`Network: ${network}`);
+      console.log(`RPC: ${rpcUrl}`);
 
-      // Create Solana connection
-      const connection = new Connection(rpcUrl, 'confirmed');
-      const sender = new PublicKey(publicKey);
       const lamports = Math.floor(parseFloat(paymentData.amount) * LAMPORTS_PER_SOL);
 
-      // 🔒 MODEL B - CLIENT-SIDE DEPOSIT
-      // STEP 1: Wallet signature for encryption key
-      console.log("🔐 Step 1: Getting wallet signature for encryption key...");
-      
-      const message = new TextEncoder().encode("Privacy Money account sign in");
-      const signatureResult = await phantom.signMessage(message, "utf8");
-      const signature = signatureResult.signature;
-      
-      console.log("✅ Wallet signature obtained");
-      
-      // Derive encryption key from signature
-      await encryptionService.deriveEncryptionKeyFromSignature(signature);
-      
-      console.log("✅ Encryption key derived");
+      // Prepare wallet adapter for SDK
+      const walletAdapter = {
+        publicKey,
+        signTransaction: phantom.signTransaction.bind(phantom),
+        signAllTransactions: phantom.signAllTransactions?.bind(phantom),
+      };
 
-      // STEP 2: Client-side deposit with ZK proof
-      console.log("🔐 Step 2: Generating ZK proof and deposit transaction...");
-      
-      const depositResult = await depositSOL({
+      // Initialize Privacy Cash SDK
+      console.log("Initializing Privacy Cash SDK...");
+      const privacyCash = await initializePrivacyCash(
+        rpcUrl,
+        walletAdapter,
+        true
+      );
+
+      // Call SDK deposit
+      console.log("Calling SDK deposit (ZK proof generation)...");
+      const depositResult = await sdkDepositSOL({
         amountLamports: lamports,
-        connection,
-        publicKey: sender,
-        signTransaction: async (tx: Transaction) => {
-          const signed = await phantom.signTransaction(tx);
-          return signed;
-        },
-        encryptionService
+        privacyCash,
       });
 
-      console.log("✅ Deposit successful!");
+      console.log("Privacy Cash SDK deposit successful!");
       console.log("   TX:", depositResult.txSignature);
-      console.log("   Commitment:", depositResult.commitment);
+      console.log("   ZK proof generated by SDK");
+      console.log("   UTXO encrypted and stored by SDK");
 
       setTxSignature(depositResult.txSignature);
       setExplorerUrl(`https://explorer.solana.com/tx/${depositResult.txSignature}?cluster=${network}`);
 
-      // STEP 3: Send metadata to backend (optional)
-      console.log("📡 Step 3: Sending metadata to backend...");
-      
-      const apiUrl = import.meta.env.VITE_API_URL;
-      if (apiUrl && linkId) {
-        try {
-          await fetch(`${apiUrl}/links/${linkId}/pay`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tx: depositResult.txSignature,
-              commitment: depositResult.commitment,
-              amount: paymentData.amount,
-              linkId: linkId
-            })
-          });
-          console.log("✅ Metadata sent to backend");
-        } catch (metadataErr) {
-          console.warn("⚠️  Failed to send metadata to backend (non-critical):", metadataErr);
-        }
-      }
-
       setPaymentState("success");
       
-      toast.success('Payment Successful! 🎉', {
+      toast.success('Payment Successful!', {
         description: 'Your private payment has been processed.',
       });
       
     } catch (error: any) {
       const message = error instanceof Error ? error.message : "Payment failed";
-      console.error("❌ Payment error:", message);
+      console.error("Payment error:", message);
       setError(message);
       
       toast.error('Payment Failed', {
@@ -250,7 +215,7 @@ const PayLink = () => {
                       </div>
                       {(!paymentData?.amount || paymentData.amount === "—") && (
                         <p className="text-xs text-red-500 mt-2">
-                          ⚠️ Invalid link: Amount not specified. Please contact the sender.
+                          Invalid link: Amount not specified. Please contact the sender.
                         </p>
                       )}
                     </div>
@@ -407,7 +372,7 @@ const PayLink = () => {
                       <div className="flex justify-between items-center">
                         <span className="text-muted-foreground">Amount</span>
                         <span className="font-semibold text-foreground">
-                          {paymentData?.amount ?? "Any"} {paymentData?.token ?? "USDC"}
+                          {paymentData?.amount ?? "Any"} {paymentData?.token ?? "SOL"}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
