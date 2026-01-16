@@ -69,6 +69,8 @@ import {
   initSupabase
 } from "./supabase.js";
 
+import privacyRoutes from "./routes/privacy.js";
+
 // NOTE: Privacy Cash imports removed
 // All ZK proof generation now handled by relayer service
 // Backend NEVER imports or calls depositSOL/withdrawSOL
@@ -132,6 +134,11 @@ app.use(express.json({ limit: "1mb" }));
 app.use(globalLimiter);
 app.use(securityLogger);
 app.use(sanitizeInput);
+
+/* ─────────────────────── ROUTES ─────────────────────── */
+
+// Privacy Cash routes (deposit/withdraw via relayer)
+app.use('/api/privacy', privacyRoutes);
 
 /* ─────────────────────── HELPERS ─────────────────────── */
 

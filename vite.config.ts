@@ -25,11 +25,6 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // Polyfills for Privacy Cash SDK Node.js dependencies
-      buffer: "buffer",
-      crypto: "crypto-browserify",
-      stream: "stream-browserify",
-      util: "util",
     },
   },
   define: {
@@ -37,7 +32,6 @@ export default defineConfig(({ mode }) => ({
       SUPABASE_URL: process.env.VITE_SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY,
     }),
-    global: "globalThis",
   },
   optimizeDeps: {
     esbuildOptions: {
