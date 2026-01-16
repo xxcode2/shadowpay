@@ -274,84 +274,42 @@ function computeNullifier(secret: bigint): bigint {
 }
 
 /**
- * Generate ZK proof for deposit
+ * Generate ZK proof for WITHDRAWAL (not deposit!)
+ * CRITICAL: Privacy Cash deposits do NOT need ZK proofs
+ * ZK proofs are only for withdrawals/spends
+ * 
+ * This function is kept for future withdrawal implementation
  */
-async function generateDepositProof(
+async function generateWithdrawalProof(
   secret: bigint,
   commitment: bigint,
   amount: bigint
 ): Promise<{ proof: Uint8Array; publicSignals: bigint[] }> {
-  console.log("🔐 Generating ZK proof...");
+  console.log("🔐 Generating ZK proof for withdrawal...");
   console.log("   This may take 10-30 seconds...");
   
-  try {
-    // Load circuit components
-    const [witnessBuilder, wasmBuffer, zkeyBuffer] = await Promise.all([
-      loadWitnessCalculatorBuilder(),
-      loadCircuitWasm(),
-      loadProvingKey()
-    ]);
-
-    console.log("🔐 Creating WitnessCalculator instance...");
-    // CRITICAL: witnessBuilder is a function that takes WASM buffer
-    // It returns a WitnessCalculator instance with calculateWitness method
-    const witnessCalc = await witnessBuilder(wasmBuffer);
-    
-    // Debug: Verify instance has correct methods
-    console.log('✅ WC instance created, methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(witnessCalc)));
-
-    // CRITICAL: Circuit inputs MUST be bigint, NOT string!
-    // String gets flattened to char array by witness_calculator
-    // This causes "Too many values for input signal" error
-    const circuitInputs = {
-      secret: secret,           // bigint directly (NO .toString()!)
-      commitment: commitment,   // bigint directly
-      amount: amount            // bigint directly
-    };
-
-    // CRITICAL: Validate inputs are bigint, not string/array
-    console.log('[FINAL ZK INPUT CHECK]', {
-      secret,
-      secretType: typeof secret,
-      secretIsArray: Array.isArray(secret),
-      commitment,
-      commitmentType: typeof commitment,
-      amount,
-      amountType: typeof amount
-    });
-
-    console.log("🔐 Calculating witness...");
-    const witness = await witnessCalc.calculateWitness(circuitInputs, false);
-
-    console.log("🔐 Generating Groth16 proof...");
-    // In real implementation, use snarkjs or wasm-based proof generation
-    // For now, return placeholder
-    const proof = new Uint8Array(256); // Groth16 proof size
-    crypto.getRandomValues(proof);
-
-    const publicSignals = [commitment, amount];
-
-    console.log("✅ ZK proof generated");
-    return { proof, publicSignals };
-  } catch (error) {
-    console.error("❌ Proof generation failed:", error);
-    throw new Error(`ZK proof generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  // TODO: Implement withdrawal proof generation with transaction2.wasm
+  // Circuit expects: root, nullifierHash, outCommitment, extDataHash, etc.
+  // NOT: secret, commitment, amount
+  
+  throw new Error("Withdrawal proof generation not yet implemented. Use this for withdrawals, not deposits!");
 }
 
 /**
  * Build Privacy Cash deposit instruction
+ * CRITICAL: Deposit does NOT require ZK proof!
+ * Only commitment and amount are needed
  */
 function buildDepositInstruction(
   userPubkey: PublicKey,
   commitment: bigint,
-  amount: bigint,
-  proof: Uint8Array
+  amount: bigint
 ): TransactionInstruction {
-  console.log("📝 Building deposit instruction...");
+  console.log("📝 Building deposit instruction (NO ZK proof)...");
 
   // Serialize instruction data
-  const data = Buffer.alloc(1 + 32 + 8 + proof.length);
+  // Format: [discriminator: 1 byte][commitment: 32 bytes][amount: 8 bytes]
+  const data = Buffer.alloc(1 + 32 + 8);
   let offset = 0;
 
   // Instruction discriminator (0 = deposit)
@@ -365,12 +323,8 @@ function buildDepositInstruction(
 
   // Amount (8 bytes, little-endian)
   data.writeBigUInt64LE(amount, offset);
-  offset += 8;
 
-  // Proof
-  proof.forEach((byte, i) => {
-    data.writeUInt8(byte, offset + i);
-  });
+  console.log("   ✅ Instruction data:", data.length, "bytes (no proof needed)");
 
   // Build instruction
   // Note: Real implementation needs correct account metas (pool PDA, merkle tree, etc.)
@@ -428,27 +382,17 @@ export async function depositSOL({
     console.log("   Commitment:", commitment.toString(16).substring(0, 16) + "...");
     console.log("   Nullifier:", nullifier.toString(16).substring(0, 16) + "...");
 
-    // 2. Generate ZK proof (browser-based)
-    console.log("\n🔐 Step 2: Generating ZK proof in browser...");
-    console.log("   ⏳ This will take 10-30 seconds, please wait...");
+    // 2. Build deposit transaction (NO ZK PROOF NEEDED!)
+    console.log("\n📝 Step 2: Building deposit transaction...");
+    console.log("   ℹ️  Privacy Cash deposits do NOT require ZK proofs");
+    console.log("   ℹ️  ZK proofs are only for withdrawals (like Tornado Cash)");
     
-    const { proof, publicSignals } = await generateDepositProof(
-      secret,
-      commitment,
-      BigInt(amountLamports)
-    );
-    
-    console.log("   ✅ Proof generated:", proof.length, "bytes");
-
-    // 3. Build deposit transaction
-    console.log("\n📝 Step 3: Building deposit transaction...");
     const transaction = new Transaction();
     
     const depositInstruction = buildDepositInstruction(
       publicKey,
       commitment,
-      BigInt(amountLamports),
-      proof
+      BigInt(amountLamports)
     );
     
     transaction.add(depositInstruction);
@@ -459,17 +403,17 @@ export async function depositSOL({
     transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = publicKey;
 
-    console.log("   ✅ Transaction built");
+    console.log("   ✅ Transaction built (no ZK proof required for deposits)");
 
-    // 4. User signs transaction
-    console.log("\n✍️  Step 4: Requesting wallet signature...");
+    // 3. User signs transaction
+    console.log("\n✍️  Step 3: Requesting wallet signature...");
     console.log("   Please approve the transaction in your wallet");
     
     const signedTransaction = await signTransaction(transaction);
     console.log("   ✅ Transaction signed by user");
 
-    // 5. Submit to RPC directly (NO BACKEND)
-    console.log("\n📡 Step 5: Submitting to Solana RPC...");
+    // 4. Submit to RPC directly (NO BACKEND)
+    console.log("\n📡 Step 4: Submitting to Solana RPC...");
     const signature = await connection.sendRawTransaction(
       signedTransaction.serialize(),
       {
@@ -480,8 +424,8 @@ export async function depositSOL({
 
     console.log("   ✅ Transaction submitted:", signature);
 
-    // 6. Confirm transaction
-    console.log("\n⏳ Step 6: Confirming transaction...");
+    // 5. Confirm transaction
+    console.log("\n⏳ Step 5: Confirming transaction...");
     const confirmation = await connection.confirmTransaction({
       signature,
       blockhash,
@@ -494,7 +438,7 @@ export async function depositSOL({
 
     console.log("   ✅ Transaction confirmed!");
 
-    // 7. Create UTXO data
+    // 6. Create UTXO data
     const utxo: UTXOData = {
       amount: amountLamports,
       commitment: commitment.toString(16),
@@ -503,8 +447,8 @@ export async function depositSOL({
       timestamp: Date.now(),
     };
 
-    // 8. Store encrypted UTXO in localStorage
-    console.log("\n💾 Step 7: Storing encrypted UTXO...");
+    // 7. Store encrypted UTXO in localStorage
+    console.log("\n💾 Step 6: Storing encrypted UTXO...");
     const encryptedUTXO = await encryptionService.encryptUTXO(utxo);
     const storedUTXOs = JSON.parse(localStorage.getItem("privacycash_utxos") || "[]");
     storedUTXOs.push(encryptedUTXO);
@@ -514,6 +458,8 @@ export async function depositSOL({
     console.log("\n🎉 DEPOSIT COMPLETE!");
     console.log("   TX:", signature);
     console.log("   Commitment:", utxo.commitment.substring(0, 16) + "...");
+    console.log("\n   ℹ️  Deposit is PUBLIC (like Tornado Cash)");
+    console.log("   ℹ️  Use ZK proof for WITHDRAWAL to break on-chain link");
 
     return {
       txSignature: signature,
