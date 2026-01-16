@@ -300,29 +300,24 @@ async function generateDepositProof(
     // Debug: Verify instance has correct methods
     console.log('✅ WC instance created, methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(witnessCalc)));
 
-    // Prepare circuit inputs
+    // CRITICAL: Circuit inputs MUST be bigint, NOT string!
+    // String gets flattened to char array by witness_calculator
+    // This causes "Too many values for input signal" error
     const circuitInputs = {
-      secret: secret.toString(),
-      commitment: commitment.toString(),
-      amount: amount.toString()
+      secret: secret,           // bigint directly (NO .toString()!)
+      commitment: commitment,   // bigint directly
+      amount: amount            // bigint directly
     };
 
-    // CRITICAL: Validate inputs are single values, not arrays
-    console.log('[ZK INPUT VALIDATION]', {
-      secret: {
-        value: circuitInputs.secret.slice(0, 20) + '...',
-        type: typeof circuitInputs.secret,
-        isArray: Array.isArray(circuitInputs.secret),
-        length: circuitInputs.secret.length
-      },
-      commitment: {
-        value: circuitInputs.commitment.slice(0, 20) + '...',
-        type: typeof circuitInputs.commitment
-      },
-      amount: {
-        value: circuitInputs.amount,
-        type: typeof circuitInputs.amount
-      }
+    // CRITICAL: Validate inputs are bigint, not string/array
+    console.log('[FINAL ZK INPUT CHECK]', {
+      secret,
+      secretType: typeof secret,
+      secretIsArray: Array.isArray(secret),
+      commitment,
+      commitmentType: typeof commitment,
+      amount,
+      amountType: typeof amount
     });
 
     console.log("🔐 Calculating witness...");
