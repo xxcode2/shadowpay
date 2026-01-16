@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import { useWallet } from "@/hooks/use-wallet";
 
-// NO WALLET NEEDED - Relayer signs everything
-// User just clicks Pay button, relayer handles Privacy Cash deposit
+// OFFICIAL PRIVACY CASH FLOW:
+// Browser → Privacy Cash SDK → User signs → Backend forwards → Relayer submits
 
 const PayLink = () => {
+  const { connected, publicKey, connect } = useWallet();
   const [paymentState, setPaymentState] = useState<"confirm" | "processing" | "success">("confirm");
   const [error, setError] = useState<string | null>(null);
   const [txSignature, setTxSignature] = useState<string | null>(null);
@@ -63,6 +65,15 @@ const PayLink = () => {
     // Prevent double-click (critical: stops duplicate payments)
     if (paymentState === "processing") return;
     
+    // CRITICAL: Wallet required for Privacy Cash (user must sign)
+    if (!connected || !publicKey) {
+      setError("Please connect your wallet to pay");
+      toast.error('Wallet Required', {
+        description: 'Privacy Cash deposits require wallet signature',
+      });
+      return;
+    }
+    
     // Validate payment amount
     if (!paymentData?.amount || paymentData.amount === "—" || isNaN(parseFloat(paymentData.amount))) {
       setError("Invalid payment amount. This link requires a fixed amount but none was specified. Please contact the sender.");
@@ -98,26 +109,42 @@ const PayLink = () => {
       console.log("💰 Starting Privacy Cash deposit...");
       console.log("   Amount:", paymentData.amount, token);
       console.log("   Link ID:", linkId);
-      console.log("   Architecture: Browser → Backend → Relayer → Privacy Cash SDK");
-      console.log("   User wallet: NOT NEEDED (relayer signs)");
+      console.log("   Wallet:", publicKey);
+      console.log("   Architecture: Browser (SDK) → User Signs → Backend → Relayer");
 
       const amount = parseFloat(paymentData.amount);
+      const amountLamports = Math.floor(amount * 1_000_000_000);
 
-      // Call backend API - let relayer handle Privacy Cash SDK
-      // User does NOT sign anything (privacy-preserving)
-      console.log("\n📤 Calling backend deposit API...");
-      console.log("   Backend will:");
-      console.log("   1. Forward request to relayer");
-      console.log("   2. Relayer runs Privacy Cash SDK");
-      console.log("   3. ZK proof generated on server");
-      console.log("   4. Relayer pays gas & submits transaction");
-      console.log("   5. User identity NEVER revealed on-chain");
+      // OFFICIAL FLOW: Privacy Cash SDK in browser, user signs
+      console.log("\n🔐 Using Privacy Cash SDK in browser...");
+      console.log("   1. SDK generates ZK proof");
+      console.log("   2. User signs transaction (Phantom popup)");
+      console.log("   3. Signed TX sent to backend");
+      console.log("   4. Backend forwards to relayer");
+      console.log("   5. Relayer submits to blockchain");
       
-      const { requestDeposit } = await import('../lib/privacyCashClient');
+      const { depositSOL, initializePrivacyCash } = await import('../lib/privacyCashDeposit');
       
-      const depositResult = await requestDeposit({
-        amount,
-        linkId: linkId,
+      // Get Phantom wallet
+      const phantom = (window as any).phantom?.solana;
+      if (!phantom) {
+        throw new Error("Phantom wallet not found");
+      }
+
+      // Initialize Privacy Cash SDK
+      const rpcUrl = import.meta.env.VITE_RPC_URL || 'https://api.mainnet-beta.solana.com';
+      const walletAdapter = {
+        publicKey: phantom.publicKey,
+        signTransaction: phantom.signTransaction.bind(phantom),
+        signAllTransactions: phantom.signAllTransactions?.bind(phantom),
+      };
+      
+      const privacyCash = await initializePrivacyCash(rpcUrl, walletAdapter, true);
+      
+      const depositResult = await depositSOL({
+        amountLamports,
+        privacyCash,
+        linkId: linkId || undefined,
       });
 
       console.log("\n🎉 Payment successful!");
@@ -253,19 +280,34 @@ const PayLink = () => {
                     </div>
 
                     {/* Pay Button */}
-                    <Button
-                      variant="hero"
-                      size="xl"
-                      className="w-full group"
-                      onClick={handlePay}
-                    >
-                      <Lock className="w-5 h-5" />
-                      Pay {paymentData?.amount} {paymentData?.token}
-                      <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-                    </Button>
+                    {!connected ? (
+                      <Button
+                        variant="hero"
+                        size="xl"
+                        className="w-full group"
+                        onClick={connect}
+                      >
+                        <Lock className="w-5 h-5" />
+                        Connect Wallet to Pay
+                        <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="hero"
+                        size="xl"
+                        className="w-full group"
+                        onClick={handlePay}
+                      >
+                        <Lock className="w-5 h-5" />
+                        Pay {paymentData?.amount} {paymentData?.token}
+                        <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                      </Button>
+                    )}
 
                     <p className="text-xs text-muted-foreground text-center mt-4">
-                      Payment processed privately via relayer
+                      {connected 
+                        ? `Wallet: ${publicKey?.slice(0, 8)}...${publicKey?.slice(-4)}`
+                        : "Connect wallet for private payment"}
                     </p>
                   </motion.div>
                 )}

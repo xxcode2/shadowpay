@@ -340,3 +340,4 @@ export function clearAllStoredData(): void {
   window.localStorage.removeItem('privacycash_cache');
   console.log("✅ Cleared all Privacy Cash data");
 }
+export { depositSOL as depositWithSignature } from './privacyCashDeposit';
