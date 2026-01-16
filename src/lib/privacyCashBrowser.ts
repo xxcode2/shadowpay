@@ -145,10 +145,11 @@ export class PrivacyCashBrowser {
         console.log('Circuit input prepared, generating proof...');
 
         // Generate ZK proof menggunakan snarkjs
+        // Convert ArrayBuffer to Uint8Array for snarkjs compatibility
         const { proof, publicSignals } = await groth16.fullProve(
             circuitInput,
-            this.circuits.wasm,
-            this.circuits.zkey
+            new Uint8Array(this.circuits.wasm),
+            new Uint8Array(this.circuits.zkey)
         );
 
         console.log('✅ ZK proof generated!');
