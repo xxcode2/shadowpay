@@ -59,7 +59,7 @@ function authenticateRequest(req, res, next) {
 /* ─────────────────────────────────────
    ENV
 ───────────────────────────────────── */
-const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const RPC_URL = process.env.SOLANA_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=c455719c-354b-4a44-98d4-27f8a18aa79c";
 const RELAYER_KEYPAIR_PATH = process.env.RELAYER_KEYPAIR_PATH || "./relayer.json";
 
 // ALT (Address Lookup Table) - SDK default may be outdated
