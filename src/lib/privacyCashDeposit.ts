@@ -307,24 +307,29 @@ function buildDepositInstruction(
 ): TransactionInstruction {
   console.log("📝 Building deposit instruction (NO ZK proof)...");
 
-  // Serialize instruction data
-  // Format: [discriminator: 1 byte][commitment: 32 bytes][amount: 8 bytes]
-  const data = Buffer.alloc(1 + 32 + 8);
+  // Use Uint8Array (browser-native), NOT Buffer (Node.js only)
+  const data = new Uint8Array(1 + 32 + 8);
   let offset = 0;
 
   // Instruction discriminator (0 = deposit)
-  data.writeUInt8(0, offset);
-  offset += 1;
+  data[offset++] = 0;
 
   // Commitment (32 bytes)
-  const commitmentBytes = Buffer.from(commitment.toString(16).padStart(64, '0'), 'hex');
-  commitmentBytes.copy(data, offset);
+  const commitmentHex = commitment.toString(16).padStart(64, "0");
+  const commitmentBytes = Uint8Array.from(
+    commitmentHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16))
+  );
+  data.set(commitmentBytes, offset);
   offset += 32;
 
-  // Amount (8 bytes, little-endian)
-  data.writeBigUInt64LE(amount, offset);
+  // Amount (8 bytes, little-endian u64)
+  let amt = amount;
+  for (let i = 0; i < 8; i++) {
+    data[offset + i] = Number(amt & 0xffn);
+    amt >>= 8n;
+  }
 
-  console.log("   ✅ Instruction data:", data.length, "bytes (no proof needed)");
+  console.log("   ✅ Instruction data:", data.length, "bytes (browser-safe Uint8Array)");
 
   // Build instruction
   // Note: Real implementation needs correct account metas (pool PDA, merkle tree, etc.)
