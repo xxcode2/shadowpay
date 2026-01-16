@@ -7,7 +7,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useWallet } from "@/hooks/use-wallet";
-import { requestDeposit } from "@/lib/privacyCashClient";
+
+// Privacy Cash SDK singleton per session (prevents state conflicts)
+let cachedPrivacyCash: any = null;
 
 const PayLink = () => {
   const { connected, publicKey, connect } = useWallet();
@@ -68,12 +70,10 @@ const PayLink = () => {
 
     // Validate payment amount
     if (!paymentData?.amount || paymentData.amount === "—" || isNaN(parseFloat(paymentData.amount))) {
-      setError("Invalid payment amount. This link may be corrupted.");
-      return;
-    }
-
-    if (!paymentData?.amount) {
-      setError("Invalid payment amount");
+      setError("Invalid payment amount. This link requires a fixed amount but none was specified. Please contact the sender.");
+      toast.error('Invalid Link', {
+        description: 'This link does not specify a payment amount.',
+      });
       return;
     }
 
@@ -114,14 +114,23 @@ const PayLink = () => {
       const { initializePrivacyCash, depositSOL } = await import('../lib/privacyCashDeposit');
       const rpcUrl = import.meta.env.VITE_RPC_URL || 'https://api.mainnet-beta.solana.com';
       
-      // Initialize SDK with Phantom wallet adapter
+      // Initialize SDK with Phantom wallet adapter (full interface)
+      const { Connection } = await import('@solana/web3.js');
+      const connection = new Connection(rpcUrl, 'confirmed');
+      
       const walletAdapter = {
         publicKey: phantom.publicKey,
         signTransaction: phantom.signTransaction.bind(phantom),
         signAllTransactions: phantom.signAllTransactions?.bind(phantom),
+        // Add sendTransaction for SDK compatibility (some operations require this)
+        sendTransaction: async (tx: any, conn: any) => {
+          const signed = await phantom.signTransaction(tx);
+          return conn.sendRawTransaction(signed.serialize());
+        }
       };
       
-      const privacyCashInstance = await initializePrivacyCash(
+      // Use singleton to prevent state conflicts (UTXO cache, commitment tree)
+      const privacyCashInstance = cachedPrivacyCash ??= await initializePrivacyCash(
         rpcUrl,
         walletAdapter,
         true
