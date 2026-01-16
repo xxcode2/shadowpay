@@ -124,6 +124,13 @@ const PayLink = () => {
       setTxSignature(depositResult.txSignature);
       setExplorerUrl(`https://explorer.solana.com/tx/${depositResult.txSignature}?cluster=${network}`);
       
+      // Success - update state
+      setPaymentState("success");
+      
+      toast.success('Payment Successful!', {
+        description: `Transaction: ${depositResult.txSignature.substring(0, 8)}...`,
+      });
+      
     } catch (error: any) {
       const message = error instanceof Error ? error.message : "Payment failed";
       console.error("Payment error:", message);
