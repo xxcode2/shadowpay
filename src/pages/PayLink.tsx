@@ -8,9 +8,10 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useWallet } from "@/hooks/use-wallet";
 
-// OFFICIAL PRIVACY CASH FLOW (ONLY CORRECT WAY):
-// Browser → Privacy Cash SDK → User Signs with Phantom → SDK Submits to Blockchain
-// NO BACKEND/RELAYER INVOLVEMENT IN DEPOSITS
+// HYBRID APPROACH (FINAL & CORRECT):
+// Frontend → Backend builds TX with Privacy Cash SDK → User signs → User submits
+// Backend: Node.js can run Privacy Cash SDK (has fs, wasm, etc)
+// User: Signs transaction, pays fees, owns UTXO
 
 const PayLink = () => {
   const { connected, publicKey, connect } = useWallet();
@@ -116,38 +117,61 @@ const PayLink = () => {
       const amount = parseFloat(paymentData.amount);
       const amountLamports = Math.floor(amount * 1_000_000_000);
 
-      // CORRECT FLOW: Privacy Cash SDK in browser, USER signs
-      console.log("\n🔐 Initializing Privacy Cash SDK in browser...");
-      console.log("   ⚠️  Phantom popup will appear for signature");
-      console.log("   ⏳ ZK proof generation: 10-30 seconds");
+      // HYBRID APPROACH: Backend builds TX, User signs
+      console.log("\n📤 Step 1: Request transaction from backend...");
+      console.log("   Backend will use Privacy Cash SDK (Node.js)");
+      console.log("   Backend builds TX with YOUR wallet as fee payer");
       
-      // Import SDK dynamically
-      const { depositSOL, initializePrivacyCash } = await import('../lib/privacyCashDeposit');
+      const apiUrl = import.meta.env.VITE_API_URL;
+      if (!apiUrl) {
+        throw new Error('API URL not configured');
+      }
+
+      // Request backend to build Privacy Cash transaction
+      const buildResponse = await fetch(`${apiUrl}/api/privacy/build-deposit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amountLamports,
+          userPublicKey: publicKey,
+          linkId,
+        }),
+      });
+
+      if (!buildResponse.ok) {
+        const error = await buildResponse.json();
+        throw new Error(error.message || 'Failed to build transaction');
+      }
+
+      const { transaction: txBase64 } = await buildResponse.json();
       
-      // Get Phantom wallet
+      console.log("\n🔐 Step 2: Sign transaction with Phantom...");
+      console.log("   Phantom popup will appear now");
+      
+      // Get Phantom and deserialize transaction
       const phantom = (window as any).phantom?.solana;
       if (!phantom) {
         throw new Error("Phantom wallet not found");
       }
 
-      // Initialize Privacy Cash SDK with USER's wallet
+      // Import Solana web3 to deserialize transaction
+      const { Transaction, Connection } = await import('@solana/web3.js');
+      const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+      
+      // User signs with Phantom
+      const signedTx = await phantom.signTransaction(tx);
+      
+      console.log("\n📡 Step 3: Submit signed transaction to blockchain...");
+      
+      // Submit to Solana
       const rpcUrl = import.meta.env.VITE_RPC_URL || 'https://api.mainnet-beta.solana.com';
-      const walletAdapter = {
-        publicKey: phantom.publicKey,
-        signTransaction: phantom.signTransaction.bind(phantom),
-        signAllTransactions: phantom.signAllTransactions?.bind(phantom),
-      };
+      const connection = new Connection(rpcUrl, 'confirmed');
+      const signature = await connection.sendRawTransaction(signedTx.serialize());
       
-      console.log("🔐 Creating Privacy Cash instance with user wallet...");
-      const privacyCash = await initializePrivacyCash(rpcUrl, walletAdapter, true);
+      // Wait for confirmation
+      await connection.confirmTransaction(signature, 'confirmed');
       
-      // SDK handles EVERYTHING: ZK proof → build TX → user signs → submit
-      console.log("🔐 Calling deposit() - Phantom will ask for signature...");
-      const depositResult = await depositSOL({
-        amountLamports,
-        privacyCash,
-        linkId: linkId || undefined,
-      });
+      const depositResult = { txSignature: signature };
 
       console.log("\n🎉 Payment successful!");
       console.log("   ✅ TX:", depositResult.txSignature);

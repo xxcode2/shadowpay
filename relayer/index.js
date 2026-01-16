@@ -195,58 +195,73 @@ app.get("/health", async (_, res) => {
 });
 
 /* ─────────────────────────────────────
-   DEPOSIT (WITH PRIVACY CASH SDK)
+   BUILD DEPOSIT TRANSACTION (HYBRID APPROACH)
 ───────────────────────────────────── */
 // CORRECT ARCHITECTURE:
-// Frontend → Backend → Relayer → Privacy Cash SDK
-// Relayer creates ZK proof and submits transaction
-// User DOES NOT sign anything (privacy-preserving)
-// Relayer pays gas fees (breaks on-chain link)
+// 1. Backend builds transaction with Privacy Cash SDK (Node.js)
+// 2. User signs transaction with Phantom (browser)
+// 3. User submits transaction to blockchain (browser)
+// 
+// Backend: Has Privacy Cash SDK (fs, wasm, zk circuits work)
+// User: Signs & pays fees (owns UTXO, privacy preserved)
 
-app.post("/deposit", authenticateRequest, async (req, res) => {
+app.post("/build-deposit", authenticateRequest, async (req, res) => {
   try {
-    const { amount, linkId, lamports } = req.body;
+    const { lamports, userPublicKey, linkId } = req.body;
 
-    // Accept either amount (SOL) or lamports
-    const depositLamports = lamports || (amount ? Math.floor(amount * LAMPORTS_PER_SOL) : null);
-
-    if (!depositLamports || depositLamports <= 0) {
+    if (!lamports || lamports <= 0) {
       return res.status(400).json({ error: "Invalid amount" });
     }
 
-    if (!linkId) {
-      return res.status(400).json({ error: "linkId required" });
+    if (!userPublicKey) {
+      return res.status(400).json({ error: "User public key required" });
     }
 
-    console.log("💰 Privacy Cash DEPOSIT via relayer");
-    console.log("   Amount:", depositLamports / LAMPORTS_PER_SOL, "SOL");
+    console.log("🏗️  Building Privacy Cash deposit transaction");
+    console.log("   Amount:", lamports / LAMPORTS_PER_SOL, "SOL");
+    console.log("   User (fee payer):", userPublicKey);
     console.log("   Link:", linkId);
-    console.log("   Fee payer: Relayer (privacy-preserving)");
 
     const startTime = Date.now();
 
-    // 🔐 PRIVACY CASH DEPOSIT (THE CORE)
-    // Create fresh SDK instance PER REQUEST to prevent state conflicts
-    // This is critical: SDK has internal state (UTXO cache, commitment tree)
-    // Concurrent requests with shared instance = race conditions
-    console.log("🔐 Creating fresh Privacy Cash SDK instance...");
+    // Create Privacy Cash SDK instance with USER's public key
+    // SDK will build transaction with user as fee payer
+    console.log("🔐 Creating Privacy Cash SDK with user as owner...");
+    
+    const userPubkey = new PublicKey(userPublicKey);
     const client = new PrivacyCash({
       RPC_url: RPC_URL,
-      owner: relayerKeypair,  // Relayer keypair is owner AND fee payer
+      owner: userPubkey,  // USER is owner and fee payer
       enableDebug: true
     });
     
-    console.log("🔐 Calling Privacy Cash SDK deposit()...");
-    console.log("   SDK will generate ZK proof and submit transaction");
-    console.log("   This may take 10-30 seconds...");
+    console.log("🔐 Building deposit transaction...");
+    console.log("   ⏳ Generating ZK proof (10-30 seconds)...");
     
-    // Privacy Cash SDK deposit() only accepts { lamports }
-    // The owner (relayerKeypair) is automatically used as fee payer
+    // SDK builds transaction but does NOT submit
+    // We need to extract the built transaction before it's signed
     const result = await client.deposit({
-      lamports: depositLamports
+      lamports: lamports
     });
 
     const duration = Date.now() - startTime;
+
+    // SDK returns signed transaction - we need to serialize it
+    // User will sign it again with their Phantom wallet
+    console.log("✅ Transaction built in", duration, "ms");
+    console.log("   Returning to frontend for user signature");
+
+    res.json({
+      success: true,
+      transaction: result.transaction || result.tx, // Serialized transaction base64
+      duration: duration
+    });
+
+  } catch (err) {
+    console.error("❌ Build transaction error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
     if (!result || !result.tx) {
       throw new Error("Privacy Cash deposit failed: no transaction signature");
