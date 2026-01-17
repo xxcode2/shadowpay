@@ -335,9 +335,10 @@ export class PrivacyCashBrowser {
         // Dummy Merkle paths (all zeros for fresh deposit)
         const MERKLE_TREE_DEPTH = 20;
         const inputMerklePathIndices = [0, 0];
+        // Each input must have an array of 20 strings ("0")
         const inputMerklePathElements = [
-            new Array(MERKLE_TREE_DEPTH).fill('0'),
-            new Array(MERKLE_TREE_DEPTH).fill('0')
+            Array.from({ length: MERKLE_TREE_DEPTH }, () => "0"),
+            Array.from({ length: MERKLE_TREE_DEPTH }, () => "0")
         ];
         
         // ExtDataHash (simplified - set to 0 for now)
