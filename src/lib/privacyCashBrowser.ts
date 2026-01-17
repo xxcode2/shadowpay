@@ -335,13 +335,19 @@ export class PrivacyCashBrowser {
         // ExtDataHash (simplified - set to 0 for now)
         const extDataHash = '0';
 
-        // DUMMY Merkle path for deposit: flat arrays of length 40
-        const DUMMY_PATH_INDICES = Array(40).fill(0);
-        const DUMMY_PATH_ELEMENTS = Array(40).fill("0");
+        // DUMMY Merkle path for deposit: [2][20] arrays
+        const ZERO_PATH_INDICES = [
+            Array(20).fill(0),
+            Array(20).fill(0)
+        ];
+        const ZERO_PATH_ELEMENTS = [
+            Array(20).fill("0"),
+            Array(20).fill("0")
+        ];
 
         // Circuit input (matches SDK structure exactly)
-        // For deposit: send flat arrays for inPathIndices/inPathElements
-        return {
+        // For deposit: send [2][20] arrays for inPathIndices/inPathElements
+        const circuitInput = {
             // Common transaction data
             root: treeRoot,
             inputNullifier: [inputNullifier0, inputNullifier1],
@@ -353,8 +359,8 @@ export class PrivacyCashBrowser {
             inAmount: [input0.amount.toString(), input1.amount.toString()],
             inPrivateKey: [privkeyBN.toString(), privkeyBN.toString()],
             inBlinding: [input0.blinding.toString(), input1.blinding.toString()],
-            inPathIndices: DUMMY_PATH_INDICES,
-            inPathElements: DUMMY_PATH_ELEMENTS,
+            inPathIndices: ZERO_PATH_INDICES,
+            inPathElements: ZERO_PATH_ELEMENTS,
 
             // Output UTXO data
             outAmount: [output0.amount.toString(), output1.amount.toString()],
@@ -364,6 +370,21 @@ export class PrivacyCashBrowser {
             // Mint address (0 for native SOL)
             mintAddress: mintAddressField
         };
+
+        // Debug: verify array shape before proof
+        console.log(
+            "inPathIndices shape:",
+            circuitInput.inPathIndices.length,
+            circuitInput.inPathIndices[0]?.length,
+            circuitInput.inPathIndices[1]?.length
+        );
+        console.log(
+            "inPathElements shape:",
+            circuitInput.inPathElements.length,
+            circuitInput.inPathElements[0]?.length,
+            circuitInput.inPathElements[1]?.length
+        );
+        return circuitInput;
     }
 
     /**
