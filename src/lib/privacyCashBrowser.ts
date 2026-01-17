@@ -335,18 +335,7 @@ export class PrivacyCashBrowser {
         // ExtDataHash (simplified - set to 0 for now)
         const extDataHash = '0';
 
-        // DUMMY Merkle path for deposit: [2][20] arrays
-        const ZERO_PATH_INDICES = [
-            Array(20).fill(0),
-            Array(20).fill(0)
-        ];
-        const ZERO_PATH_ELEMENTS = [
-            Array(20).fill("0"),
-            Array(20).fill("0")
-        ];
-
-        // Circuit input (matches SDK structure exactly)
-        // For deposit: send [2][20] arrays for inPathIndices/inPathElements
+        // For DEPOSIT: inPathIndices and inPathElements must be empty arrays!
         const circuitInput = {
             // Common transaction data
             root: treeRoot,
@@ -359,8 +348,8 @@ export class PrivacyCashBrowser {
             inAmount: [input0.amount.toString(), input1.amount.toString()],
             inPrivateKey: [privkeyBN.toString(), privkeyBN.toString()],
             inBlinding: [input0.blinding.toString(), input1.blinding.toString()],
-            inPathIndices: ZERO_PATH_INDICES,
-            inPathElements: ZERO_PATH_ELEMENTS,
+            inPathIndices: [],
+            inPathElements: [],
 
             // Output UTXO data
             outAmount: [output0.amount.toString(), output1.amount.toString()],
@@ -372,18 +361,9 @@ export class PrivacyCashBrowser {
         };
 
         // Debug: verify array shape before proof
-        console.log(
-            "inPathIndices shape:",
-            circuitInput.inPathIndices.length,
-            circuitInput.inPathIndices[0]?.length,
-            circuitInput.inPathIndices[1]?.length
-        );
-        console.log(
-            "inPathElements shape:",
-            circuitInput.inPathElements.length,
-            circuitInput.inPathElements[0]?.length,
-            circuitInput.inPathElements[1]?.length
-        );
+        console.log("isDeposit mode");
+        console.log("inPathIndices:", circuitInput.inPathIndices);
+        console.log("inPathElements:", circuitInput.inPathElements);
         return circuitInput;
     }
 
