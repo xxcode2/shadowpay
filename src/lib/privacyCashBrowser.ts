@@ -332,22 +332,11 @@ export class PrivacyCashBrowser {
             mintAddressField
         ]);
         
-        // Dummy Merkle paths (all zeros for fresh deposit)
-        const MERKLE_TREE_DEPTH = 20;
-        // Array of 2 arrays, each length 20
-        const inputMerklePathIndices = [
-            Array(MERKLE_TREE_DEPTH).fill(0),
-            Array(MERKLE_TREE_DEPTH).fill(0)
-        ];
-        const inputMerklePathElements = [
-            Array(MERKLE_TREE_DEPTH).fill("0"),
-            Array(MERKLE_TREE_DEPTH).fill("0")
-        ];
-        
         // ExtDataHash (simplified - set to 0 for now)
         const extDataHash = '0';
-        
+
         // Circuit input (matches SDK structure exactly)
+        // For deposit: inPathIndices and inPathElements must be empty arrays
         return {
             // Common transaction data
             root: treeRoot,
@@ -355,19 +344,19 @@ export class PrivacyCashBrowser {
             outputCommitment: [outputCommitment0, outputCommitment1],
             publicAmount: publicAmountForCircuit.toString(),
             extDataHash,
-            
+
             // Input UTXO data
             inAmount: [input0.amount.toString(10), input1.amount.toString(10)],
             inPrivateKey: [privkeyBN.toString(), privkeyBN.toString()],
             inBlinding: [input0.blinding.toString(10), input1.blinding.toString(10)],
-            inPathIndices: inputMerklePathIndices,
-            inPathElements: inputMerklePathElements,
-            
+            inPathIndices: [],
+            inPathElements: [],
+
             // Output UTXO data
             outAmount: [output0.amount.toString(10), output1.amount.toString(10)],
             outBlinding: [output0.blinding.toString(10), output1.blinding.toString(10)],
             outPubkey: [pubkey.toString(), pubkey.toString()],
-            
+
             // Mint address (0 for native SOL)
             mintAddress: mintAddressField
         };
