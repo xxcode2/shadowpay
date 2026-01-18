@@ -1,11 +1,14 @@
 /**
- * Privacy Cash API Client
+ * Privacy Cash Client - DEPRECATED MODEL
  * 
- * Frontend client untuk communicate dengan backend/relayer.
- * Frontend TIDAK import Privacy Cash SDK - semua ZK operations di backend.
+ * ⚠️  NOTE: Relayer-signed deposits are NOT the correct architecture
  * 
- * Architecture:
- * Browser (Phantom) → Backend API → Relayer → Privacy Cash SDK → Blockchain
+ * CORRECT ARCHITECTURE (confirmed by Privacy Cash team):
+ * - Deposits: User signs in browser → privacyCashClientSigned.ts
+ * - Withdrawals: Relayer-signed → Can use this file (requestWithdraw)
+ * 
+ * The requestDeposit() function below is DEPRECATED.
+ * Use privacyCashClientSigned.ts for deposits.
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
@@ -40,55 +43,20 @@ export interface WithdrawResponse {
 }
 
 /**
- * Request deposit via backend relayer
- * Relayer will call Privacy Cash SDK to perform ZK deposit
- * User does NOT sign - relayer handles everything (privacy-preserving)
+ * ❌ DEPRECATED: Do not use for deposits
+ * 
+ * This function expects relayer to sign deposits, which violates non-custodial principle.
+ * 
+ * USE INSTEAD: privacyCashClientSigned.ts for user-signed deposits
+ * 
+ * @deprecated Use submitSignedDeposit from privacyCashClientSigned.ts
  */
 export async function requestDeposit(request: DepositRequest): Promise<DepositResponse> {
-  console.log('📤 Requesting deposit via backend...');
-  console.log('   Amount:', request.amount, 'SOL');
-  console.log('   Link:', request.linkId);
-  console.log('   Architecture: Browser → Backend → Relayer → Privacy Cash SDK');
-  
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/privacy/deposit`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: request.amount,
-        linkId: request.linkId,
-      }),
-    });
-
-    if (!response.ok) {
-      let errorMessage = 'Deposit request failed';
-      try {
-        const error = await response.json();
-        errorMessage = error.message || error.error || JSON.stringify(error);
-      } catch (e) {
-        // Response is not JSON, try text
-        const text = await response.text();
-        errorMessage = text || `HTTP ${response.status}: ${response.statusText}`;
-      }
-      console.error('❌ Backend error response:', errorMessage);
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    
-    console.log('✅ Deposit request successful!');
-    console.log('   TX:', data.txSignature);
-    console.log('   Commitment:', data.commitment);
-    
-    return data;
-  } catch (error) {
-    console.error('❌ Deposit request failed:', error);
-    console.error('   API URL:', `${API_BASE_URL}/api/privacy/deposit`);
-    console.error('   Error type:', error instanceof Error ? error.constructor.name : typeof error);
-    throw error;
-  }
+  throw new Error(
+    "❌ requestDeposit() is deprecated - relayer deposits violate non-custodial principle\n" +
+    "Use privacyCashClientSigned.ts instead for user-signed deposits\n" +
+    "Architecture: User signs in browser → Browser submits to blockchain"
+  );
 }
 
 /**

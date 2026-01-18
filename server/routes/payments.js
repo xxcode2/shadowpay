@@ -1,89 +1,41 @@
+/**
+ * ✅ DEPRECATED ROUTES - REMOVED
+ * 
+ * Old flow: GET unsigned tx → SIGN → SUBMIT
+ * 
+ * ❌ WRONG architecture issues:
+ * - /initiate endpoint tried to use Privacy Cash SDK incorrectly
+ * - buildDepositTx() isn't proper SDK usage
+ * - Manual tx building violates SDK architecture
+ * 
+ * ✅ NEW CORRECT FLOW:
+ * - Frontend signs deposit tx directly with Phantom
+ * - Frontend sends SIGNED tx to /api/links/:id/pay
+ * - Server stores metadata (commitment, status)
+ * - ZK proof handled by Privacy Cash SDK on blockchain
+ * 
+ * This file now just returns 410 Gone for backwards compatibility
+ */
+
 import express from "express"
-import { Connection, Transaction } from "@solana/web3.js"
-import { PrivacyCash } from "privacy-cash-sdk"
 
 const router = express.Router()
 
-// ===== SOLANA CONNECTION =====
-const connection = new Connection(
-  process.env.SOLANA_RPC || "https://api.devnet.solana.com",
-  "confirmed"
-)
-
-// ===== PRIVACY CASH INIT (NODE ONLY) =====
-const privacyCash = new PrivacyCash({
-  network: process.env.SOLANA_NETWORK || "devnet",
-  relayerKeypair: JSON.parse(process.env.RELAYER_KEYPAIR),
+// Deprecated endpoints
+router.post("/initiate", (req, res) => {
+  res.status(410).json({
+    error: "Gone - This endpoint is deprecated",
+    message: "Use PayLink.tsx to sign transaction directly in browser",
+    migrate: "POST /api/links/:id/pay with signedTx parameter"
+  })
 })
 
-// ===== INITIATE PAYMENT =====
-router.post("/initiate", async (req, res) => {
-  try {
-    const { amount, linkId, payer } = req.body
-
-    if (!amount || !linkId || !payer) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing parameters",
-      })
-    }
-
-    const tx = await privacyCash.buildDepositTx({
-      amount: Number(amount),
-      payer,
-      memo: `shadowpay:${linkId}`,
-    })
-
-    const serializedTx = tx.serialize({
-      requireAllSignatures: false,
-      verifySignatures: false,
-    })
-
-    res.json({
-      success: true,
-      serializedTx: serializedTx.toString("base64"),
-    })
-  } catch (err) {
-    console.error("[PAYMENT INIT ERROR]", err)
-    res.status(500).json({
-      success: false,
-      error: err.message || "Internal error",
-    })
-  }
-})
-
-// ===== SUBMIT SIGNED TX =====
-router.post("/submit", async (req, res) => {
-  try {
-    const { signedTx } = req.body
-
-    if (!signedTx) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing signed transaction",
-      })
-    }
-
-    const tx = Transaction.from(Buffer.from(signedTx, "base64"))
-
-    const signature = await connection.sendRawTransaction(
-      tx.serialize(),
-      { skipPreflight: false }
-    )
-
-    await connection.confirmTransaction(signature, "confirmed")
-
-    res.json({
-      success: true,
-      signature,
-    })
-  } catch (err) {
-    console.error("[PAYMENT SUBMIT ERROR]", err)
-    res.status(500).json({
-      success: false,
-      error: err.message || "Transaction failed",
-    })
-  }
+router.post("/submit", (req, res) => {
+  res.status(410).json({
+    error: "Gone - This endpoint is deprecated", 
+    message: "Transaction submission is now handled by PayLink.tsx and /api/links/:id/pay",
+    migrate: "POST /api/links/:id/pay with signedTx parameter"
+  })
 })
 
 export default router
