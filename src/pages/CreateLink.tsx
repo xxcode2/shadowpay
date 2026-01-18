@@ -7,9 +7,11 @@ import {
   Check,
   ChevronDown,
   Shield,
+  ExternalLink,
   Info,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +30,8 @@ const CreateLink = () => {
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [token, setToken] = useState("SOL");
   const [expiryHours, setExpiryHours] = useState<string>("");
+
+  const navigate = useNavigate();
 
   const handleCreateLink = async () => {
     if (amountType === "fixed") {
@@ -63,16 +67,16 @@ const CreateLink = () => {
       });
 
       const text = await res.text();
-
       let json;
+
       try {
         json = JSON.parse(text);
       } catch {
         throw new Error("Invalid response from server");
       }
 
-      if (!res.ok || !json.link?.url) {
-        throw new Error(json.error || "Failed to create link");
+      if (!res.ok || !json?.link?.url) {
+        throw new Error(json?.error || "Failed to create link");
       }
 
       setGeneratedLink(json.link.url);
@@ -114,6 +118,8 @@ const CreateLink = () => {
       <main className="pt-24 pb-16">
         <div className="container mx-auto px-4">
           <div className="max-w-xl mx-auto">
+
+            {/* Header */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -122,7 +128,7 @@ const CreateLink = () => {
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mx-auto mb-6 shadow-glow">
                 <Lock className="w-7 h-7 text-primary-foreground" />
               </div>
-              <h1 className="text-3xl font-bold mb-3">
+              <h1 className="text-3xl font-bold text-foreground mb-3">
                 Create Receive Link
               </h1>
               <p className="text-muted-foreground">
@@ -137,41 +143,51 @@ const CreateLink = () => {
               </AlertDescription>
             </Alert>
 
-            <motion.div className="bg-card rounded-2xl p-6">
+            <motion.div className="bg-card border rounded-2xl p-6 sm:p-8">
               <AnimatePresence mode="wait">
                 {!linkCreated ? (
                   <motion.div key="form" className="space-y-6">
+
                     {/* Amount */}
-                    {amountType === "fixed" && (
+                    {amountType === "fixed" ? (
                       <Input
                         type="number"
                         placeholder="0.00"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
-                        className="h-14 text-xl"
+                        className="h-14 text-2xl font-semibold"
                       />
+                    ) : (
+                      <div className="h-14 flex items-center justify-center rounded-xl border border-dashed">
+                        Sender chooses amount
+                      </div>
                     )}
 
                     <Button
+                      size="xl"
                       className="w-full"
                       onClick={handleCreateLink}
                       disabled={loadingCreate}
                     >
-                      {loadingCreate ? "Creating..." : "Create Private Link"}
+                      <Lock className="w-5 h-5" />
+                      {loadingCreate ? "Creating..." : "Create Private Payment Link"}
                     </Button>
                   </motion.div>
                 ) : (
-                  <motion.div key="success" className="space-y-4">
-                    <h2 className="text-xl font-semibold text-center">
-                      Link Created
-                    </h2>
+                  <motion.div key="success" className="space-y-6">
+                    <div className="text-center">
+                      <Check className="mx-auto text-green-500" />
+                      <h2 className="text-xl font-semibold">Link Created!</h2>
+                    </div>
+
                     <div className="flex gap-2">
                       <Input value={generatedLink || ""} readOnly />
-                      <Button onClick={handleCopy}>
+                      <Button variant="outline" onClick={handleCopy}>
                         {copied ? <Check /> : <Copy />}
                       </Button>
                     </div>
-                    <Button variant="ghost" onClick={handleReset}>
+
+                    <Button variant="ghost" className="w-full" onClick={handleReset}>
                       Create another link
                     </Button>
                   </motion.div>
